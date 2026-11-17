@@ -22,6 +22,6 @@ Set up https://github.com/lettimknow/claude-usage-tile for me
     "user": {"scopes": ["profile"]}}
    ```
 
-3. Pin the artifact to the user's sidebar.
+3. Pin the artifact to the user's sidebar and tell them to open it from there, not from a link in the chat: the sidebar opens it where it can reach the extension.
 
 Not affiliated with Anthropic.
