@@ -1,0 +1,691 @@
+<title>Claude Code Usage</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300..700&display=swap">
+<style>
+/* Layout: a greeting over one card – view tabs and period chips, six stat tiles,
+   a 26-week activity grid and one line of trivia. Sizes, colors and type follow
+   the Claude Desktop start-screen card, measured from a 2x screenshot. */
+:root {
+  --page: #fcfcfb;
+  --ink: #0b0b0b;
+  --muted: #898781;
+  --layer: 11 11 11;
+  --card: rgb(var(--layer) / 0.05);
+  --tile: rgb(var(--layer) / 0.1);
+  --tab-on: rgb(var(--layer) / 0.05);
+  --chip-on: rgb(var(--layer) / 0.035);
+  --heat-1: #7badef;
+  --heat-2: #5396ea;
+  --heat-3: #247ee5;
+  --heat-4: #0068d7;
+  --m1: #3e70d8; --m2: #6b97e6; --m3: #8fb0ec; --m4: #adc5f1; --m5: #c9d8f5; --m6: #dce6f9;
+  --tip-bg: #0b0b0b;
+  --tip-fg: #fcfcfb;
+  --note-bg: #e7f1fb;
+  --note-ink: #184f95;
+  --focus: #2a78d6;
+  /* DM Sans weights matched to the original card's ink, measured from the screenshot */
+  --font: "DM Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --w-text: 390;
+  --w-title: 375;
+  --w-control: 530;
+  --w-value: 500;
+}
+@supports (color: color(display-p3 0 0 0)) {
+  :root {
+    --heat-1: color(display-p3 0.5255 0.6745 0.9176);
+    --heat-2: color(display-p3 0.3882 0.5804 0.8941);
+    --heat-3: color(display-p3 0.2510 0.4863 0.8706);
+    --heat-4: color(display-p3 0.1490 0.4000 0.8157);
+  }
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --page: #151515; --ink: #f0efec; --muted: #898781; --layer: 252 252 251;
+    --heat-1: #92a8e6; --heat-2: #7490df; --heat-3: #5877d8; --heat-4: #4160cb;
+    --m1: #5a84dc; --m2: #6f93e2; --m3: #8ba7ea; --m4: #a9bdf0; --m5: #c9d5f5; --m6: #dde5f9;
+    --tip-bg: #f0efec; --tip-fg: #151515; --note-bg: #1d2a3d; --note-ink: #9ec5f4; --focus: #86b6ef;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --page: #151515; --ink: #f0efec; --muted: #898781; --layer: 252 252 251;
+  --heat-1: #92a8e6; --heat-2: #7490df; --heat-3: #5877d8; --heat-4: #4160cb;
+  --m1: #5a84dc; --m2: #6f93e2; --m3: #8ba7ea; --m4: #a9bdf0; --m5: #c9d5f5; --m6: #dde5f9;
+  --tip-bg: #f0efec; --tip-fg: #151515; --note-bg: #1d2a3d; --note-ink: #9ec5f4; --focus: #86b6ef;
+  color-scheme: dark;
+}
+
+/* The start screen kept a chat box under the card; without it, the block sits a little above
+   the middle (the extra bottom padding). The card keeps its 526.5px width via the side padding. */
+html { height: 100%; }
+body {
+  background: var(--page); color: var(--ink); font-family: var(--font); font-weight: var(--w-text);
+  min-height: 100%; display: grid; grid-template-columns: minmax(0, 1fr); align-content: center;
+}
+.wrap {
+  margin: 0; box-sizing: border-box; padding-block: 24px calc(24px + 15vh);
+  padding-left: max(16px, env(safe-area-inset-left, 0px), calc((100% - 526.5px) / 2));
+  padding-right: max(16px, env(safe-area-inset-right, 0px), calc((100% - 526.5px) / 2));
+  display: grid; gap: 53px;
+}
+h1 { margin: 0; font-size: 22px; line-height: 28px; font-weight: var(--w-title); text-wrap: balance; }
+button { font: inherit; color: inherit; cursor: pointer; }
+button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+a { color: inherit; }
+
+.card { background: var(--card); border-radius: 8.5px; padding: 8.5px 13.5px 14.5px; display: grid; }
+.bar { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; padding-left: 1px; }
+.seg { display: flex; gap: 4px; align-items: center; }
+.seg button {
+  border: 0; background: transparent; color: var(--muted); padding: 2px 6px;
+  font-size: 13px; line-height: 17px; font-weight: var(--w-control);
+}
+.seg[role="group"] { gap: 3.5px; margin-right: 1px; }
+.seg[role="group"] button { padding-inline: 5.5px; }
+.seg button[role="tab"] { padding-block: 1.5px; }
+.seg button[aria-selected="true"] { background: var(--tab-on); color: var(--ink); border-radius: 3px; }
+.seg button[aria-pressed="true"] { background: var(--chip-on); color: var(--ink); border-radius: 4px; padding-block: 2.5px; }
+.seg button:hover { color: var(--ink); }
+.chip {
+  font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--note-ink);
+  background: var(--note-bg); border-radius: 4px; padding: 2px 6px; margin-left: 4px;
+}
+
+.note {
+  margin-top: 12px; background: var(--note-bg); color: var(--note-ink); border-radius: 6px; padding: 8px 10px;
+  font-size: 13px; line-height: 18px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+}
+.note p { margin: 0; flex: 1 1 260px; min-width: 0; }
+.note button {
+  border: 0; border-radius: 4px; padding: 4px 10px; background: var(--note-ink); color: var(--page);
+  font-size: 13px; font-weight: 600;
+}
+
+.panel { margin-top: 22px; }
+.stats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4.5px; }
+.stat {
+  background: var(--tile); border-radius: 5px; height: 48px; box-sizing: border-box;
+  padding: 3px 4.5px 0; display: grid; align-content: start; gap: 3px; min-width: 0;
+}
+.stat .k { color: var(--muted); font-size: 13px; line-height: 17px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.stat .v {
+  font-size: 15px; line-height: 20px; font-weight: var(--w-value);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.stat .v.name { font-size: 13.5px; font-weight: var(--w-text); }
+
+.heat {
+  margin-top: 7px; display: grid; grid-auto-flow: column;
+  grid-template-columns: repeat(26, minmax(0, 1fr)); grid-template-rows: repeat(7, auto);
+  gap: 3px; touch-action: manipulation;
+}
+.cell { aspect-ratio: 1; border-radius: 3px; background: var(--tile); min-width: 0; }
+.cell[data-l="1"] { background: var(--heat-1); }
+.cell[data-l="2"] { background: var(--heat-2); }
+.cell[data-l="3"] { background: var(--heat-3); }
+.cell[data-l="4"] { background: var(--heat-4); }
+.cell.future { visibility: hidden; }
+.cell.out { opacity: 0.3; }
+
+.fact { margin: 12px 0 0; color: var(--muted); font-size: 12px; line-height: 16px; min-height: 16px; font-weight: 385; }
+
+/* Models: one stacked bar per active day (input + output tokens), a step ramp of
+   one blue from the biggest model down, the y scale on the left, every few dates below. */
+.chart {
+  display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: 143px auto;
+  column-gap: 8px; margin-top: 18px; font-size: 12px; line-height: 16px; color: var(--muted);
+}
+.yaxis { position: relative; min-width: 22px; }
+.yaxis span { position: absolute; right: 0; transform: translateY(-50%); white-space: nowrap; }
+.plot { position: relative; display: flex; align-items: flex-end; padding-right: 12px; }
+.col { flex: 1 1 0; min-width: 0; height: 100%; display: flex; justify-content: center; align-items: flex-end; }
+.stack { width: 77%; display: flex; flex-direction: column-reverse; gap: 1px; border-radius: 2px 2px 0 0; overflow: hidden; }
+.stack > i { display: block; min-height: 0; }
+.col:hover .stack { filter: brightness(1.08); }
+.xaxis { grid-column: 2; position: relative; height: 16px; margin-top: 11px; margin-right: 12px; }
+.xaxis span { position: absolute; transform: translateX(-50%); white-space: nowrap; }
+.legend { list-style: none; margin: 16px 0 0; padding: 0; display: grid; gap: 4px; font-size: 14px; line-height: 17.5px; }
+.legend li { display: grid; grid-template-columns: minmax(0, 1fr) auto 3.6em; column-gap: 12px; align-items: center; }
+.legend .name { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.legend .name span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.legend .sw { width: 9px; height: 9px; border-radius: 2px; flex: none; }
+.legend .io { color: var(--muted); white-space: nowrap; }
+.legend .pct { text-align: right; white-space: nowrap; }
+
+.tip {
+  position: fixed; z-index: 20; pointer-events: none; background: var(--tip-bg); color: var(--tip-fg);
+  border-radius: 6px; padding: 6px 8px; font-size: 12px; line-height: 16px; max-width: 240px;
+  font-family: var(--font);
+}
+.tip b { display: block; font-weight: var(--w-value); font-size: 13px; }
+.tip .muted { opacity: 0.65; }
+.tip .row { display: flex; gap: 8px; justify-content: space-between; }
+
+@media (max-width: 360px) {
+  .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .heat { gap: 2px; }
+}
+</style>
+
+<main class="wrap">
+  <h1 id="greet">What’s up next?</h1>
+
+  <section class="card" aria-labelledby="greet">
+    <div class="bar">
+      <div class="seg" role="tablist" aria-label="View">
+        <button type="button" role="tab" id="tab-overview" aria-selected="true" aria-controls="overview">Overview</button>
+        <button type="button" role="tab" id="tab-models" aria-selected="false" aria-controls="models">Models</button>
+        <span class="chip" id="example-chip" hidden>Example</span>
+      </div>
+      <div class="seg" role="group" aria-label="Period">
+        <button type="button" id="range-all" data-range="all" aria-pressed="true">All</button>
+        <button type="button" id="range-30" data-range="30" aria-pressed="false">30d</button>
+        <button type="button" id="range-7" data-range="7" aria-pressed="false">7d</button>
+      </div>
+    </div>
+
+    <div class="note" id="note" role="status" hidden></div>
+
+    <div class="panel" id="overview" role="tabpanel" aria-labelledby="tab-overview">
+      <div class="stats">
+        <div class="stat"><span class="k">Sessions</span><span class="v" id="v-sessions">–</span></div>
+        <div class="stat"><span class="k">Messages</span><span class="v" id="v-messages">–</span></div>
+        <div class="stat"><span class="k">Total tokens</span><span class="v" id="v-tokens">–</span></div>
+        <div class="stat"><span class="k">Active days</span><span class="v" id="v-days">–</span></div>
+        <div class="stat"><span class="k">Peak hour</span><span class="v" id="v-peak">–</span></div>
+        <div class="stat"><span class="k">Favorite model</span><span class="v name" id="v-model">–</span></div>
+      </div>
+      <div class="heat" id="heat" role="img" aria-label="Daily activity grid"></div>
+      <p class="fact" id="fact"></p>
+    </div>
+
+    <div class="panel" id="models" role="tabpanel" aria-labelledby="tab-models" hidden>
+      <div class="chart" id="chart" role="img" aria-label="Input and output tokens per day, by model">
+        <div class="yaxis" id="yaxis"></div>
+        <div class="plot" id="plot"></div>
+        <div class="xaxis" id="xaxis"></div>
+      </div>
+      <ul class="legend" id="legend"></ul>
+    </div>
+  </section>
+</main>
+<div class="tip" id="tip" hidden></div>
+
+<script>
+(function () {
+  "use strict";
+
+  // Claude Desktop names an extension's server after its display name.
+  var SERVER = "host:Claude_Code_Usage_Tile";
+  var TOOL = "get_usage_stats";
+  var SETUP_URL = "https://github.com/lettimknow/claude-usage-tile#setup";
+  var WEEKS = 26;
+
+  // Token counts Claude Code uses for its own "more tokens than" line.
+  var BOOKS = [
+    ["The Little Prince", 22000], ["The Old Man and the Sea", 35000], ["A Christmas Carol", 37000],
+    ["Animal Farm", 39000], ["Fahrenheit 451", 60000], ["The Great Gatsby", 62000],
+    ["Slaughterhouse-Five", 64000], ["Brave New World", 83000], ["The Catcher in the Rye", 95000],
+    ["Harry Potter and the Philosopher's Stone", 103000], ["The Hobbit", 123000], ["1984", 123000],
+    ["To Kill a Mockingbird", 130000], ["Pride and Prejudice", 156000], ["Dune", 244000],
+    ["Moby-Dick", 268000], ["Crime and Punishment", 274000], ["A Game of Thrones", 381000],
+    ["Anna Karenina", 468000], ["Don Quixote", 520000], ["The Lord of the Rings", 576000],
+    ["The Count of Monte Cristo", 603000], ["Les Misérables", 689000], ["War and Peace", 730000]
+  ];
+  var RAMP = 6; // shades of one blue, darkest for the biggest model; past five, the rest fold into Other
+  var OTHER = "\u0000other";
+
+  var state = { data: null, example: false, range: "all", view: "overview", factPick: {}, mcp: null };
+  var $ = function (id) { return document.getElementById(id); };
+
+  // ------------------------------------------------------------ format
+  var intFmt = new Intl.NumberFormat("en-US");
+  function fmtInt(n) { return intFmt.format(Math.round(n)); }
+  function fmtTokens(n) {
+    if (n >= 1e9) return (n / 1e9).toFixed(1) + "B";
+    if (n >= 1e6) return (n / 1e6).toFixed(1) + "M";
+    if (n >= 1e3) return (n / 1e3).toFixed(1) + "k";
+    return String(Math.round(n));
+  }
+  function fmtTick(n) { return n ? fmtTokens(n).replace(/\.0(?=[kMB]$)/, "") : "0"; }
+  function fmtHour(h) {
+    if (h === 0) return "12 AM";
+    if (h < 12) return h + " AM";
+    if (h === 12) return "12 PM";
+    return (h - 12) + " PM";
+  }
+  function cap(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : s; }
+  function modelName(id) {
+    if (!id || id === "unknown") return "Unknown";
+    if (id.indexOf("claude-") !== 0) return id;
+    var parts = id.slice(7).replace(/-\d{8}$/, "").split("-");
+    var family = parts.filter(function (p) { return /^[a-z]/i.test(p); })[0];
+    var nums = parts.filter(function (p) { return /^\d+$/.test(p); });
+    if (!family) return id;
+    return cap(family) + (nums.length ? " " + nums.join(".") : "");
+  }
+  function ymd(d) {
+    return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+  }
+  function parseYmd(s) { var p = s.split("-"); return new Date(+p[0], +p[1] - 1, +p[2]); }
+  var dayFmt = new Intl.DateTimeFormat("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" });
+  var shortFmt = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" });
+
+  // ------------------------------------------------------------ data
+  function rangeStart() {
+    if (state.range === "all") return null;
+    var d = new Date(); d.setHours(0, 0, 0, 0);
+    d.setDate(d.getDate() - (Number(state.range) - 1));
+    return ymd(d);
+  }
+  function inRange(date, start) { return !start || date >= start; }
+
+  // Input and output tokens of one model on one day (older payloads carry only totals).
+  function ioOf(day, model) {
+    if (day.io) return day.io[model] || [0, 0];
+    return [0, day.tokens[model] || 0];
+  }
+
+  function summarize(data) {
+    var start = rangeStart();
+    var days = data.days.filter(function (d) { return inRange(d.date, start); });
+    var sessions = data.sessions.filter(function (s) { return inRange(s[0], start); });
+    var byModel = {}, total = 0, messages = 0, active = 0;
+    days.forEach(function (d) {
+      messages += d.messages;
+      if (d.messages > 0) active++;
+      // By display name: a dated and an undated id of one model count together.
+      Object.keys(d.tokens).forEach(function (id) {
+        var m = modelName(id);
+        byModel[m] = (byModel[m] || 0) + d.tokens[id]; total += d.tokens[id];
+      });
+    });
+    // Peak hour: the start hour with the most sessions; ties go to the earlier hour.
+    var hours = {};
+    sessions.forEach(function (s) { hours[s[1]] = (hours[s[1]] || 0) + 1; });
+    var peak = null, best = 0;
+    for (var h = 0; h < 24; h++) if ((hours[h] || 0) > best) { best = hours[h]; peak = h; }
+    var favorite = null;
+    Object.keys(byModel).forEach(function (m) { if (favorite === null || byModel[m] > byModel[favorite]) favorite = m; });
+    return { start: start, days: days, sessions: sessions.length, messages: messages, total: total, active: active,
+             peak: peak, favorite: favorite, byModel: byModel };
+  }
+
+  function factFor(sum) {
+    var books = BOOKS.filter(function (b) { return sum.total >= b[1]; });
+    if (!books.length) return "";
+    if (state.factPick[state.range] === undefined) state.factPick[state.range] = Math.random();
+    var book = books[Math.floor(state.factPick[state.range] * books.length)];
+    var times = Math.floor(sum.total / book[1]);
+    return times >= 2 ? "You’ve used ~" + times + "× more tokens than " + book[0] + "."
+                      : "You’ve used about as many tokens as " + book[0] + ".";
+  }
+
+  // ------------------------------------------------------------ render
+  function render() {
+    var data = state.data;
+    $("example-chip").hidden = !state.example;
+    if (!data) return;
+    var sum = summarize(data);
+    $("v-sessions").textContent = fmtInt(sum.sessions);
+    $("v-messages").textContent = fmtInt(sum.messages);
+    $("v-tokens").textContent = fmtTokens(sum.total);
+    $("v-days").textContent = fmtInt(sum.active);
+    $("v-peak").textContent = sum.peak === null ? "–" : fmtHour(sum.peak);
+    $("v-model").textContent = sum.favorite || "–";
+    $("fact").textContent = factFor(sum);
+    renderHeat(data, sum.start);
+    renderModels(data, sum);
+  }
+
+  // Shade = share of the busiest day's messages in the grid: up to 25%, 50%, 75%, then above.
+  function level(n, max) {
+    if (!n || !max) return 0;
+    return Math.min(4, Math.ceil((4 * n) / max));
+  }
+
+  // Days before the selected period fade out; the shade itself stays set by the whole grid.
+  function renderHeat(data, start) {
+    var el = $("heat");
+    var byDate = {};
+    data.days.forEach(function (d) { byDate[d.date] = d; });
+    var today = new Date(); today.setHours(0, 0, 0, 0);
+    var todayKey = ymd(today);
+    var first = new Date(today);
+    first.setDate(today.getDate() - today.getDay() - (WEEKS - 1) * 7);
+    var firstKey = ymd(first);
+    var max = 0;
+    data.days.forEach(function (d) { if (d.date >= firstKey && d.date <= todayKey && d.messages > max) max = d.messages; });
+    var frag = document.createDocumentFragment();
+    var activeDays = 0;
+    for (var i = 0; i < WEEKS * 7; i++) {
+      var d = new Date(first); d.setDate(first.getDate() + i);
+      var key = ymd(d);
+      var row = byDate[key];
+      var cell = document.createElement("div");
+      cell.className = "cell";
+      cell.dataset.date = key;
+      if (key > todayKey) cell.classList.add("future");
+      else if (start && key < start) cell.classList.add("out");
+      var l = level(row ? row.messages : 0, max);
+      if (l) { cell.dataset.l = String(l); activeDays++; }
+      frag.appendChild(cell);
+    }
+    el.replaceChildren(frag);
+    el.setAttribute("aria-label", "Activity over the last " + WEEKS + " weeks: " + activeDays + " active days. Darker squares mean more messages.");
+  }
+
+  function renderModels(data, sum) {
+    var days = data.days.filter(function (d) { return inRange(d.date, sum.start); });
+    // Series by display name, each with the ids it covers.
+    var per = {}, members = {};
+    days.forEach(function (d) {
+      Object.keys(d.io || d.tokens).forEach(function (id) {
+        var m = modelName(id), io = ioOf(d, id), p = per[m] || (per[m] = [0, 0]);
+        var ids = members[m] || (members[m] = []);
+        if (ids.indexOf(id) < 0) ids.push(id);
+        p[0] += io[0]; p[1] += io[1];
+      });
+    });
+    var models = Object.keys(per)
+      .filter(function (m) { return per[m][0] + per[m][1] > 0; })
+      .sort(function (a, b) { return (per[b][0] + per[b][1]) - (per[a][0] + per[a][1]); });
+    if (models.length > RAMP) {
+      var other = [0, 0], otherIds = [];
+      models.slice(RAMP - 1).forEach(function (m) {
+        other[0] += per[m][0]; other[1] += per[m][1]; otherIds = otherIds.concat(members[m]);
+      });
+      models = models.slice(0, RAMP - 1).concat(OTHER);
+      per[OTHER] = other; members[OTHER] = otherIds;
+    }
+    var shade = {};
+    models.forEach(function (m, i) { shade[m] = "var(--m" + (i + 1) + ")"; });
+    var total = models.reduce(function (a, m) { return a + per[m][0] + per[m][1]; }, 0);
+
+    var list = $("legend");
+    list.replaceChildren();
+    if (!models.length) {
+      var empty = document.createElement("li");
+      empty.className = "io";
+      empty.textContent = "No model usage in this period.";
+      list.appendChild(empty);
+    }
+    models.forEach(function (m) {
+      var li = document.createElement("li");
+      li.innerHTML = '<span class="name"><span class="sw"></span><span></span></span><span class="io"></span><span class="pct"></span>';
+      li.querySelector(".sw").style.background = shade[m];
+      li.querySelector(".name span:last-child").textContent = m === OTHER ? "Other" : m;
+      li.querySelector(".io").textContent = fmtTokens(per[m][0]) + " in · " + fmtTokens(per[m][1]) + " out";
+      li.querySelector(".pct").textContent = (total ? ((per[m][0] + per[m][1]) / total) * 100 : 0).toFixed(1) + "%";
+      list.appendChild(li);
+    });
+    renderChart(days, models, shade, members);
+  }
+
+  // Scale step: 1, 2, 3 or 5 x 10^n, about five steps to the top of the busiest day.
+  function niceStep(raw) {
+    var mag = Math.pow(10, Math.floor(Math.log10(raw)));
+    var steps = [1, 2, 3, 5, 10];
+    for (var i = 0; i < steps.length; i++) if (steps[i] * mag >= raw) return steps[i] * mag;
+    return 10 * mag;
+  }
+  function renderChart(days, models, shade, members) {
+    var plot = $("plot"), yaxis = $("yaxis"), xaxis = $("xaxis");
+    plot.replaceChildren(); yaxis.replaceChildren(); xaxis.replaceChildren();
+    var bars = days.map(function (d) {
+      var parts = models.map(function (m) {
+        return [m, members[m].reduce(function (a, id) { var io = ioOf(d, id); return a + io[0] + io[1]; }, 0)];
+      }).filter(function (p) { return p[1] > 0; });
+      return { date: d.date, parts: parts, total: parts.reduce(function (a, p) { return a + p[1]; }, 0) };
+    }).filter(function (b) { return b.total > 0; });
+    plot._bars = bars;
+    if (!bars.length) return;
+    var max = Math.max.apply(null, bars.map(function (b) { return b.total; }));
+    var step = niceStep(max / 5), top = Math.ceil(max / step) * step;
+    for (var v = 0; v <= top + step / 2; v += step) {
+      var t = document.createElement("span");
+      t.style.top = (100 - (v / top) * 100) + "%";
+      t.textContent = fmtTick(v);
+      yaxis.appendChild(t);
+    }
+    // Up to eight dates, fewer when the card is narrow: about 52px per label ("Aug 18").
+    var room = Math.max(2, Math.min(8, Math.floor((document.querySelector(".card").clientWidth - 80) / 52)));
+    var every = Math.max(1, Math.ceil(bars.length / room));
+    bars.forEach(function (b, i) {
+      var col = document.createElement("div");
+      col.className = "col";
+      col.dataset.date = b.date;
+      var bar = document.createElement("div");
+      bar.className = "stack";
+      bar.style.height = (b.total / top) * 100 + "%";
+      b.parts.forEach(function (p) {
+        var seg = document.createElement("i");
+        seg.style.flex = p[1] + " 1 0px";
+        seg.style.background = shade[p[0]];
+        bar.appendChild(seg);
+      });
+      col.appendChild(bar);
+      plot.appendChild(col);
+      if (i % every === 0) {
+        var label = document.createElement("span");
+        label.style.left = ((i + 0.5) / bars.length) * 100 + "%";
+        label.textContent = shortFmt.format(parseYmd(b.date));
+        xaxis.appendChild(label);
+      }
+    });
+  }
+
+  // ------------------------------------------------------------ tooltip
+  var tip = $("tip");
+  function showTip(html, target) {
+    tip.innerHTML = html;
+    tip.hidden = false;
+    var r = target.getBoundingClientRect();
+    var t = tip.getBoundingClientRect();
+    var x = Math.min(window.innerWidth - t.width - 8, Math.max(8, r.left + r.width / 2 - t.width / 2));
+    var y = r.top - t.height - 8;
+    if (y < 8) y = r.bottom + 8;
+    tip.style.left = x + "px"; tip.style.top = y + "px";
+  }
+  function hideTip() { tip.hidden = true; }
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+
+  $("heat").addEventListener("pointerover", function (e) {
+    var cell = e.target.closest(".cell");
+    if (!cell || cell.classList.contains("future") || !state.data) return;
+    var row = state.data.days.find(function (d) { return d.date === cell.dataset.date; });
+    // Input + output tokens lead, the measure of the Models tab; messages and sessions that
+    // ran that day follow (older servers send only the sessions started that day).
+    var msgs = row ? row.messages : 0;
+    var sess = row ? (typeof row.activeSessions === "number" ? row.activeSessions : row.sessions) : 0;
+    var io = row ? Object.keys(row.io || row.tokens).reduce(function (a, m) { var p = ioOf(row, m); return a + p[0] + p[1]; }, 0) : 0;
+    var msgText = fmtInt(msgs) + (msgs === 1 ? " message" : " messages");
+    var sessText = fmtInt(sess) + (sess === 1 ? " session" : " sessions");
+    showTip('<div class="muted">' + esc(dayFmt.format(parseYmd(cell.dataset.date))) + "</div>" +
+      (!msgs ? "<b>No activity</b>"
+        : io ? "<b>" + fmtTokens(io) + " tokens</b>" + '<div class="muted">' + msgText + " · " + sessText + "</div>"
+        : "<b>" + msgText + "</b>" + '<div class="muted">' + sessText + "</div>"), cell);
+  });
+  $("heat").addEventListener("pointerleave", hideTip);
+  $("plot").addEventListener("pointerover", function (e) {
+    var col = e.target.closest(".col");
+    var plot = $("plot");
+    if (!col || !plot._bars) return;
+    var b = plot._bars.find(function (x) { return x.date === col.dataset.date; });
+    if (!b) return;
+    var lines = b.parts.map(function (p) {
+      return '<div class="row"><span>' + esc(p[0] === OTHER ? "Other" : p[0]) + "</span><span>" + fmtTokens(p[1]) + "</span></div>";
+    });
+    showTip("<b>" + esc(dayFmt.format(parseYmd(b.date))) + "</b>" + lines.join(""), col.querySelector(".stack") || col);
+  });
+  $("plot").addEventListener("pointerleave", hideTip);
+  window.addEventListener("scroll", hideTip, { passive: true });
+  var resizing = 0, lastWidth = window.innerWidth;
+  window.addEventListener("resize", function () {
+    if (window.innerWidth === lastWidth) return;
+    lastWidth = window.innerWidth;
+    cancelAnimationFrame(resizing);
+    resizing = requestAnimationFrame(function () { hideTip(); render(); }); // date labels follow the card width
+  });
+
+  // ------------------------------------------------------------ controls
+  function setView(view) {
+    state.view = view;
+    $("tab-overview").setAttribute("aria-selected", String(view === "overview"));
+    $("tab-models").setAttribute("aria-selected", String(view === "models"));
+    $("overview").hidden = view !== "overview";
+    $("models").hidden = view !== "models";
+    hideTip();
+    try { localStorage.setItem("tile-view", view); } catch (e) {}
+  }
+  function setRange(range) {
+    state.range = range;
+    document.querySelectorAll("[data-range]").forEach(function (b) {
+      b.setAttribute("aria-pressed", String(b.dataset.range === range));
+    });
+    try { localStorage.setItem("tile-range", range); } catch (e) {}
+    render();
+  }
+  $("tab-overview").addEventListener("click", function () { setView("overview"); });
+  $("tab-models").addEventListener("click", function () { setView("models"); });
+  document.querySelector('[role="tablist"]').addEventListener("keydown", function (e) {
+    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+    var next = state.view === "overview" ? "models" : "overview";
+    setView(next); $("tab-" + next).focus();
+  });
+  document.querySelectorAll("[data-range]").forEach(function (b) {
+    b.addEventListener("click", function () { setRange(b.dataset.range); });
+  });
+
+  // ------------------------------------------------------------ notes
+  function note(kind, detail) {
+    var el = $("note");
+    el.replaceChildren();
+    if (!kind) { el.hidden = true; return; }
+    var p = document.createElement("p");
+    var link = '<a href="' + SETUP_URL + '" target="_blank" rel="noopener">setup guide</a>';
+    var button = null;
+    if (kind === "loading") p.textContent = "Reading your Claude Code transcripts… The first run takes a few seconds.";
+    else if (kind === "nohost") p.innerHTML = "Example data. Your own numbers show up when you open this tile in the Claude desktop app with the Claude Code Usage Tile extension. See the " + link + ".";
+    else if (kind === "noserver") p.innerHTML = "Example data. The local server isn't reachable: check that the Claude Code Usage Tile extension is installed and turned on in Claude Settings → Extensions, then reopen the tile. See the " + link + ".";
+    else if (kind === "allow") { p.textContent = "Allow this tile to read usage totals from the local server."; button = "Show my stats"; }
+    else if (kind === "toolerror") p.textContent = "The local server couldn't read your transcripts: " + (detail || "unknown error") + ".";
+    else if (kind === "unavailable") p.textContent = "The local server didn't answer. Reopen the tile in a moment.";
+    else if (kind === "stale") p.textContent = "Couldn't refresh just now. Showing the last numbers.";
+    el.appendChild(p);
+    if (button) {
+      var b = document.createElement("button");
+      b.type = "button"; b.id = "allow"; b.textContent = button;
+      b.addEventListener("click", function () { fetchNow(); });
+      el.appendChild(b);
+    }
+    el.hidden = false;
+  }
+
+  function showExample() {
+    state.data = exampleData();
+    state.example = true;
+    render();
+  }
+  function showReal(payload) {
+    if (!payload || !Array.isArray(payload.days) || !Array.isArray(payload.sessions)) {
+      note("toolerror", "unexpected answer from the server");
+      return;
+    }
+    state.data = payload;
+    state.example = false;
+    note(null);
+    render();
+  }
+
+  function onError(err) {
+    var code = err && err.code;
+    // A transient failure gets one quiet retry per page load.
+    if (err && err.retryable && !state.retried) {
+      state.retried = true;
+      setTimeout(fetchNow, Math.min(err.retryAfterMs || 0, 60000) + 1500 + Math.random() * 2500);
+    }
+    if (code === "approval_required" || code === "not_in_manifest" || code === "consent_required" || code === "cancelled") {
+      if (!state.example) showExample();
+      note("allow");
+    } else if (code === "server_not_connected" || code === "server_not_found" || code === "selection_required" ||
+               code === "needs_reauth" || code === "blocked_by_policy") {
+      showExample(); note("noserver");
+    } else if (code === "not_granted" || code === "capability_disabled" || code === "capability_removed") {
+      showExample(); note("nohost");
+    } else if (code === "tool_error") {
+      note("toolerror", err.message);
+    } else if (state.data && !state.example) {
+      note("stale");
+    } else {
+      note("unavailable");
+    }
+  }
+
+  function fetchNow() {
+    if (!state.mcp) return;
+    state.mcp.callTool(SERVER, TOOL, {}, { cache: { refresh: true, staleTime: 60000, gcTime: 604800000 } })
+      .then(function (res) { showReal(res.payload); })
+      .catch(onError);
+  }
+
+  // ------------------------------------------------------------ example data
+  function exampleData() {
+    var seed = 7;
+    function rnd() { seed = (seed * 16807) % 2147483647; return (seed - 1) / 2147483646; }
+    var models = ["claude-opus-5-5", "claude-sonnet-5-5", "claude-haiku-5-5"];
+    var days = [], sessions = [];
+    var today = new Date(); today.setHours(0, 0, 0, 0);
+    for (var i = 110; i >= 0; i--) {
+      var d = new Date(today); d.setDate(today.getDate() - i);
+      if (rnd() < 0.28) continue;
+      var n = Math.max(1, Math.round(1 + rnd() * 4));
+      var msgs = 0, tokens = {};
+      for (var s = 0; s < n; s++) {
+        var m = Math.round(40 + rnd() * 600);
+        msgs += m;
+        sessions.push([ymd(d), Math.round(9 + rnd() * 12), Math.round((10 + rnd() * 170) * 60000), m]);
+      }
+      tokens[models[0]] = Math.round(msgs * (60000 + rnd() * 90000));
+      if (rnd() < 0.6) tokens[models[1]] = Math.round(msgs * rnd() * 40000);
+      if (rnd() < 0.3) tokens[models[2]] = Math.round(msgs * rnd() * 9000);
+      var io = {};
+      Object.keys(tokens).forEach(function (m) { io[m] = [Math.round(tokens[m] * 0.0004), Math.round(tokens[m] * 0.002)]; });
+      days.push({ date: ymd(d), messages: msgs, sessions: n, activeSessions: n, toolCalls: Math.round(msgs * 0.4),
+                  tokens: tokens, io: io });
+    }
+    return { version: 1, generatedAt: null, days: days, sessions: sessions };
+  }
+
+  // ------------------------------------------------------------ boot
+  renderHeat({ days: [] }, null); // an empty grid holds the card's height until data arrives
+  try {
+    var savedView = localStorage.getItem("tile-view");
+    var savedRange = localStorage.getItem("tile-range");
+    if (savedView === "models") setView("models");
+    if (savedRange === "30" || savedRange === "7") setRange(savedRange);
+  } catch (e) {}
+
+  var api = window.claude && typeof window.claude.use === "function" ? window.claude : null;
+
+  if (api) {
+    api.use("user").then(function (user) {
+      return user ? user.name() : "";
+    }).then(function (name) {
+      var first = String(name || "").trim().split(/\s+/)[0];
+      if (first) $("greet").textContent = "What’s up next, " + first + "?";
+    }).catch(function () {});
+  }
+
+  (api ? api.use("mcp") : Promise.resolve(null)).then(function (mcp) {
+    if (!mcp) { showExample(); note("nohost"); return; }
+    state.mcp = mcp;
+    note("loading");
+    mcp.watchTool(SERVER, TOOL, {}, function (ev) {
+      if (ev.type === "data") showReal(ev.result && ev.result.payload);
+      else onError(ev.error);
+    }, { cache: { staleTime: 60000, gcTime: 604800000 }, refetchInterval: 600000 });
+  }).catch(function () { showExample(); note("nohost"); });
+})();
+</script>

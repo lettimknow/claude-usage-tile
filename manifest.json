@@ -1,0 +1,39 @@
+{
+  "manifest_version": "0.3",
+  "name": "claude-usage-tile",
+  "display_name": "Claude Code Usage Tile",
+  "version": "0.5.0",
+  "description": "Feeds the Claude Code usage tile: sessions, messages, tokens per model and daily activity, read from your local Claude Code transcripts.",
+  "long_description": "A tiny local server for the Claude Code Usage Tile artifact. It reads the session transcripts Claude Code keeps in ~/.claude/projects, adds them up per day and hands the totals to the tile when you open it in Claude Desktop. Nothing leaves your computer and no model is involved, so it costs no tokens. Totals are cached in ~/.cache/claude-usage-tile, so after the first scan an update takes a fraction of a second, and history stays even after Claude Code cleans up old transcripts.",
+  "author": {
+    "name": "Timur Muidinov",
+    "url": "https://github.com/lettimknow"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/lettimknow/claude-usage-tile"
+  },
+  "homepage": "https://github.com/lettimknow/claude-usage-tile",
+  "license": "MIT",
+  "keywords": ["claude-code", "usage", "stats", "artifact"],
+  "server": {
+    "type": "node",
+    "entry_point": "server/index.js",
+    "mcp_config": {
+      "command": "node",
+      "args": ["${__dirname}/server/index.js"]
+    }
+  },
+  "tools": [
+    {
+      "name": "get_usage_stats",
+      "description": "Daily Claude Code usage from local transcripts: messages, sessions, tool calls and tokens per model. Read-only."
+    }
+  ],
+  "compatibility": {
+    "platforms": ["darwin", "win32", "linux"],
+    "runtimes": {
+      "node": ">=18.0.0"
+    }
+  }
+}
