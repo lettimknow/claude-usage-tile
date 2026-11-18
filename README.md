@@ -4,7 +4,7 @@ The Claude Code usage card that Claude Desktop removed in version 2.42304.0, bac
 
 <img src="docs/tile.png" alt="The tile in light and dark: Overview with six numbers and a 26-week activity grid, Models with tokens per day by model">
 
-A day's tooltip adds its cost at Claude API prices. Context compaction and Claude Code's background calls aren't in the transcripts, so they aren't in the cost either.
+Tokens count each API response once, cache reads and writes included, and come with their cost at Claude API prices. Context compaction and Claude Code's background calls aren't in the transcripts, so they aren't counted.
 
 ## Setup
 

@@ -131,7 +131,7 @@ a { color: inherit; }
 
 .fact { margin: 12px 0 0; color: var(--muted); font-size: 12px; line-height: 16px; min-height: 16px; font-weight: 385; }
 
-/* Models: one stacked bar per active day (input + output tokens), a step ramp of
+/* Models: one stacked bar per active day (tokens, each API response once), a step ramp of
    one blue from the biggest model down, the y scale on the left, every few dates below. */
 .chart {
   display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-rows: 143px auto;
@@ -151,7 +151,7 @@ a { color: inherit; }
 .legend .name { display: flex; align-items: center; gap: 6px; min-width: 0; }
 .legend .name span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .legend .sw { width: 9px; height: 9px; border-radius: 2px; flex: none; }
-.legend .io { color: var(--muted); white-space: nowrap; }
+.legend .amt { color: var(--muted); white-space: nowrap; }
 .legend .pct { text-align: right; white-space: nowrap; }
 
 .tip {
@@ -160,11 +160,15 @@ a { color: inherit; }
   font-family: var(--font);
 }
 .tip b { display: block; font-weight: var(--w-value); font-size: 13px; }
+.tip .cost, .stat .cost { font-weight: var(--w-text); }
 .tip .muted { opacity: 0.65; }
 .tip .row { display: flex; gap: 8px; justify-content: space-between; }
 
-@media (max-width: 360px) {
+/* Two columns once a third of the card can't hold a six-figure "14.6B ≈ $345,020". */
+@media (max-width: 480px) {
   .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 360px) {
   .heat { gap: 2px; }
 }
 </style>
@@ -190,9 +194,9 @@ a { color: inherit; }
 
     <div class="panel" id="overview" role="tabpanel" aria-labelledby="tab-overview">
       <div class="stats">
-        <div class="stat"><span class="k">Sessions</span><span class="v" id="v-sessions">–</span></div>
+        <div class="stat"><span class="k">Total tokens</span><span class="v"><span id="v-tokens">–</span> <span class="cost" id="v-cost"></span></span></div>
         <div class="stat"><span class="k">Messages</span><span class="v" id="v-messages">–</span></div>
-        <div class="stat"><span class="k">Total tokens</span><span class="v" id="v-tokens">–</span></div>
+        <div class="stat"><span class="k">Sessions</span><span class="v" id="v-sessions">–</span></div>
         <div class="stat"><span class="k">Active days</span><span class="v" id="v-days">–</span></div>
         <div class="stat"><span class="k">Peak hour</span><span class="v" id="v-peak">–</span></div>
         <div class="stat"><span class="k">Favorite model</span><span class="v name" id="v-model">–</span></div>
@@ -202,7 +206,7 @@ a { color: inherit; }
     </div>
 
     <div class="panel" id="models" role="tabpanel" aria-labelledby="tab-models" hidden>
-      <div class="chart" id="chart" role="img" aria-label="Input and output tokens per day, by model">
+      <div class="chart" id="chart" role="img" aria-label="Tokens per day, by model">
         <div class="yaxis" id="yaxis"></div>
         <div class="plot" id="plot"></div>
         <div class="xaxis" id="xaxis"></div>
@@ -310,10 +314,26 @@ a { color: inherit; }
   }
   function inRange(date, start) { return !start || date >= start; }
 
-  // Input and output tokens of one model on one day (older payloads carry only totals).
-  function ioOf(day, model) {
-    if (day.io) return day.io[model] || [0, 0];
-    return [0, day.tokens[model] || 0];
+  // Tokens of each model on one day (input, output, cache reads and writes, each API response
+  // once) with their cost at API prices. Servers before 0.6.0 send only totals that count a
+  // response on every transcript line it repeats on: those stand in, with no cost.
+  function modelsOf(day) {
+    var out = {};
+    if (!day.usage) {
+      Object.keys(day.tokens || {}).forEach(function (id) { out[id] = { tokens: day.tokens[id], dollars: 0, unpriced: false }; });
+      return out;
+    }
+    Object.keys(day.usage).forEach(function (key) {
+      var u = day.usage[key], p = priceOf(key), id = key.split("|")[0];
+      var m = out[id] || (out[id] = { tokens: 0, dollars: 0, unpriced: false });
+      for (var i = 0; i < 5; i++) { m.tokens += u[i] || 0; if (p) m.dollars += (u[i] || 0) * p[i] / 1e6; }
+      if (!p && u.some(Boolean)) m.unpriced = true;
+    });
+    return out;
+  }
+  function tokensOf(day) {
+    var ms = modelsOf(day);
+    return Object.keys(ms).reduce(function (a, id) { return a + ms[id].tokens; }, 0);
   }
 
   // A usage key is a model id with what changes its price: "|fast", "|us", "|long".
@@ -330,12 +350,8 @@ a { color: inherit; }
   // missing from the price tables counts as $0 and flags the day.
   function costOf(day) {
     if (!day.usage) return null;
-    var dollars = (day.webSearches || 0) * WEB_SEARCH, unpriced = false;
-    Object.keys(day.usage).forEach(function (key) {
-      var u = day.usage[key], p = priceOf(key);
-      if (!p) { unpriced = unpriced || u.some(Boolean); return; }
-      for (var i = 0; i < 5; i++) dollars += (u[i] || 0) * p[i] / 1e6;
-    });
+    var ms = modelsOf(day), dollars = (day.webSearches || 0) * WEB_SEARCH, unpriced = false;
+    Object.keys(ms).forEach(function (id) { dollars += ms[id].dollars; unpriced = unpriced || ms[id].unpriced; });
     return { dollars: dollars, unpriced: unpriced };
   }
 
@@ -343,15 +359,18 @@ a { color: inherit; }
     var start = rangeStart();
     var days = data.days.filter(function (d) { return inRange(d.date, start); });
     var sessions = data.sessions.filter(function (s) { return inRange(s[0], start); });
-    var byModel = {}, total = 0, messages = 0, active = 0;
+    var byModel = {}, total = 0, messages = 0, active = 0, cost = null;
     days.forEach(function (d) {
       messages += d.messages;
       if (d.messages > 0) active++;
       // By display name: a dated and an undated id of one model count together.
-      Object.keys(d.tokens).forEach(function (id) {
+      var ms = modelsOf(d);
+      Object.keys(ms).forEach(function (id) {
         var m = modelName(id);
-        byModel[m] = (byModel[m] || 0) + d.tokens[id]; total += d.tokens[id];
+        byModel[m] = (byModel[m] || 0) + ms[id].tokens; total += ms[id].tokens;
       });
+      var c = costOf(d);
+      if (c) cost = { dollars: (cost ? cost.dollars : 0) + c.dollars, unpriced: !!(cost && cost.unpriced) || c.unpriced };
     });
     // Peak hour: the start hour with the most sessions; ties go to the earlier hour.
     var hours = {};
@@ -361,7 +380,7 @@ a { color: inherit; }
     var favorite = null;
     Object.keys(byModel).forEach(function (m) { if (favorite === null || byModel[m] > byModel[favorite]) favorite = m; });
     return { start: start, days: days, sessions: sessions.length, messages: messages, total: total, active: active,
-             peak: peak, favorite: favorite, byModel: byModel };
+             peak: peak, favorite: favorite, byModel: byModel, cost: cost };
   }
 
   function factFor(sum) {
@@ -383,6 +402,7 @@ a { color: inherit; }
     $("v-sessions").textContent = fmtInt(sum.sessions);
     $("v-messages").textContent = fmtInt(sum.messages);
     $("v-tokens").textContent = fmtTokens(sum.total);
+    $("v-cost").textContent = sum.cost ? fmtCost(sum.cost.dollars) : "";
     $("v-days").textContent = fmtInt(sum.active);
     $("v-peak").textContent = sum.peak === null ? "–" : fmtHour(sum.peak);
     $("v-model").textContent = sum.favorite || "–";
@@ -391,24 +411,25 @@ a { color: inherit; }
     renderModels(data, sum);
   }
 
-  // Shade = share of the busiest day's messages in the grid: up to 25%, 50%, 75%, then above.
+  // Shade = share of the busiest day's tokens in the grid: up to 25%, 50%, 75%, then above.
   function level(n, max) {
     if (!n || !max) return 0;
     return Math.min(4, Math.ceil((4 * n) / max));
   }
 
   // Days before the selected period fade out; the shade itself stays set by the whole grid.
+  // A day with messages but no tokens (say, only failed requests) still shows as active.
   function renderHeat(data, start) {
     var el = $("heat");
-    var byDate = {};
-    data.days.forEach(function (d) { byDate[d.date] = d; });
+    var byDate = {}, tokens = {};
+    data.days.forEach(function (d) { byDate[d.date] = d; tokens[d.date] = tokensOf(d); });
     var today = new Date(); today.setHours(0, 0, 0, 0);
     var todayKey = ymd(today);
     var first = new Date(today);
     first.setDate(today.getDate() - today.getDay() - (WEEKS - 1) * 7);
     var firstKey = ymd(first);
     var max = 0;
-    data.days.forEach(function (d) { if (d.date >= firstKey && d.date <= todayKey && d.messages > max) max = d.messages; });
+    data.days.forEach(function (d) { if (d.date >= firstKey && d.date <= todayKey && tokens[d.date] > max) max = tokens[d.date]; });
     var frag = document.createDocumentFragment();
     var activeDays = 0;
     for (var i = 0; i < WEEKS * 7; i++) {
@@ -420,59 +441,68 @@ a { color: inherit; }
       cell.dataset.date = key;
       if (key > todayKey) cell.classList.add("future");
       else if (start && key < start) cell.classList.add("out");
-      var l = level(row ? row.messages : 0, max);
+      var l = row ? level(tokens[key], max) || (row.messages > 0 ? 1 : 0) : 0;
       if (l) { cell.dataset.l = String(l); activeDays++; }
       frag.appendChild(cell);
     }
     el.replaceChildren(frag);
-    el.setAttribute("aria-label", "Activity over the last " + WEEKS + " weeks: " + activeDays + " active days. Darker squares mean more messages.");
+    el.setAttribute("aria-label", "Activity over the last " + WEEKS + " weeks: " + activeDays + " active days. Darker squares mean more tokens.");
+  }
+
+  // Tokens of a series on one day, with their cost: [tokens, dollars].
+  function seriesOn(ms, ids) {
+    return ids.reduce(function (a, id) { return ms[id] ? [a[0] + ms[id].tokens, a[1] + ms[id].dollars] : a; }, [0, 0]);
   }
 
   function renderModels(data, sum) {
     var days = data.days.filter(function (d) { return inRange(d.date, sum.start); });
-    // Series by display name, each with the ids it covers.
+    var priced = days.some(function (d) { return !!d.usage; });
+    // Series by display name, each with the ids it covers: [tokens, dollars, unpriced].
     var per = {}, members = {};
     days.forEach(function (d) {
-      Object.keys(d.io || d.tokens).forEach(function (id) {
-        var m = modelName(id), io = ioOf(d, id), p = per[m] || (per[m] = [0, 0]);
+      var ms = modelsOf(d);
+      Object.keys(ms).forEach(function (id) {
+        var m = modelName(id), p = per[m] || (per[m] = [0, 0, false]);
         var ids = members[m] || (members[m] = []);
         if (ids.indexOf(id) < 0) ids.push(id);
-        p[0] += io[0]; p[1] += io[1];
+        p[0] += ms[id].tokens; p[1] += ms[id].dollars; p[2] = p[2] || ms[id].unpriced;
       });
     });
     var models = Object.keys(per)
-      .filter(function (m) { return per[m][0] + per[m][1] > 0; })
-      .sort(function (a, b) { return (per[b][0] + per[b][1]) - (per[a][0] + per[a][1]); });
+      .filter(function (m) { return per[m][0] > 0; })
+      .sort(function (a, b) { return per[b][0] - per[a][0]; });
     if (models.length > RAMP) {
-      var other = [0, 0], otherIds = [];
+      var other = [0, 0, false], otherIds = [];
       models.slice(RAMP - 1).forEach(function (m) {
-        other[0] += per[m][0]; other[1] += per[m][1]; otherIds = otherIds.concat(members[m]);
+        other[0] += per[m][0]; other[1] += per[m][1]; other[2] = other[2] || per[m][2]; otherIds = otherIds.concat(members[m]);
       });
       models = models.slice(0, RAMP - 1).concat(OTHER);
       per[OTHER] = other; members[OTHER] = otherIds;
     }
     var shade = {};
     models.forEach(function (m, i) { shade[m] = "var(--m" + (i + 1) + ")"; });
-    var total = models.reduce(function (a, m) { return a + per[m][0] + per[m][1]; }, 0);
+    var total = models.reduce(function (a, m) { return a + per[m][0]; }, 0);
 
     var list = $("legend");
     list.replaceChildren();
     if (!models.length) {
       var empty = document.createElement("li");
-      empty.className = "io";
+      empty.className = "amt";
       empty.textContent = "No model usage in this period.";
       list.appendChild(empty);
     }
+    // A series with only unpriced usage shows no cost rather than $0.
+    var costText = function (p) { return priced && !(p[2] && !p[1]) ? " " + fmtCost(p[1]) : ""; };
     models.forEach(function (m) {
       var li = document.createElement("li");
-      li.innerHTML = '<span class="name"><span class="sw"></span><span></span></span><span class="io"></span><span class="pct"></span>';
+      li.innerHTML = '<span class="name"><span class="sw"></span><span></span></span><span class="amt"></span><span class="pct"></span>';
       li.querySelector(".sw").style.background = shade[m];
       li.querySelector(".name span:last-child").textContent = m === OTHER ? "Other" : m;
-      li.querySelector(".io").textContent = fmtTokens(per[m][0]) + " in · " + fmtTokens(per[m][1]) + " out";
-      li.querySelector(".pct").textContent = (total ? ((per[m][0] + per[m][1]) / total) * 100 : 0).toFixed(1) + "%";
+      li.querySelector(".amt").textContent = fmtTokens(per[m][0]) + costText(per[m]);
+      li.querySelector(".pct").textContent = (total ? (per[m][0] / total) * 100 : 0).toFixed(1) + "%";
       list.appendChild(li);
     });
-    renderChart(days, models, shade, members);
+    renderChart(days, models, shade, members, priced);
   }
 
   // Scale step: 1, 2, 3 or 5 x 10^n, about five steps to the top of the busiest day.
@@ -482,16 +512,18 @@ a { color: inherit; }
     for (var i = 0; i < steps.length; i++) if (steps[i] * mag >= raw) return steps[i] * mag;
     return 10 * mag;
   }
-  function renderChart(days, models, shade, members) {
+  function renderChart(days, models, shade, members, priced) {
     var plot = $("plot"), yaxis = $("yaxis"), xaxis = $("xaxis");
     plot.replaceChildren(); yaxis.replaceChildren(); xaxis.replaceChildren();
     var bars = days.map(function (d) {
-      var parts = models.map(function (m) {
-        return [m, members[m].reduce(function (a, id) { var io = ioOf(d, id); return a + io[0] + io[1]; }, 0)];
-      }).filter(function (p) { return p[1] > 0; });
+      var ms = modelsOf(d);
+      // parts: [series, tokens, dollars]
+      var parts = models.map(function (m) { return [m].concat(seriesOn(ms, members[m])); })
+        .filter(function (p) { return p[1] > 0; });
       return { date: d.date, parts: parts, total: parts.reduce(function (a, p) { return a + p[1]; }, 0) };
     }).filter(function (b) { return b.total > 0; });
     plot._bars = bars;
+    plot._priced = priced;
     if (!bars.length) return;
     var max = Math.max.apply(null, bars.map(function (b) { return b.total; }));
     var step = niceStep(max / 5), top = Math.ceil(max / step) * step;
@@ -548,20 +580,20 @@ a { color: inherit; }
     var cell = e.target.closest(".cell");
     if (!cell || cell.classList.contains("future") || !state.data) return;
     var row = state.data.days.find(function (d) { return d.date === cell.dataset.date; });
-    // Messages lead: the grid is shaded by them, as the original card was. Input + output
-    // tokens with their cost at API prices and the sessions that ran that day follow (older
-    // servers send only the sessions started that day).
+    // Tokens lead, the measure the grid is shaded by, with their cost at API prices; messages
+    // and sessions that ran that day follow (older servers send only the sessions started that day).
     var msgs = row ? row.messages : 0;
     var sess = row ? (typeof row.activeSessions === "number" ? row.activeSessions : row.sessions) : 0;
-    var io = row ? Object.keys(row.io || row.tokens).reduce(function (a, m) { var p = ioOf(row, m); return a + p[0] + p[1]; }, 0) : 0;
+    var tokens = row ? tokensOf(row) : 0;
     var cost = row ? costOf(row) : null;
     var msgText = fmtInt(msgs) + (msgs === 1 ? " message" : " messages");
     var sessText = fmtInt(sess) + (sess === 1 ? " session" : " sessions");
-    var tokText = io ? fmtTokens(io) + " tokens" + (cost ? " " + fmtCost(cost.dollars) : "") + " · " : "";
     showTip('<div class="muted">' + esc(dayFmt.format(parseYmd(cell.dataset.date))) + "</div>" +
-      (!msgs ? "<b>No activity</b>"
-        : "<b>" + msgText + "</b>" + '<div class="muted">' + tokText + sessText + "</div>" +
-          (io && cost && cost.unpriced ? '<div class="muted">+ unpriced models</div>' : "")), cell);
+      (tokens ? "<b>" + fmtTokens(tokens) + " tokens" + (cost ? ' <span class="cost">' + fmtCost(cost.dollars) + "</span>" : "") + "</b>" +
+                '<div class="muted">' + msgText + " · " + sessText + "</div>" +
+                (cost && cost.unpriced ? '<div class="muted">+ unpriced models</div>' : "")
+        : msgs ? "<b>" + msgText + "</b>" + '<div class="muted">' + sessText + "</div>"
+        : "<b>No activity</b>"), cell);
   });
   $("heat").addEventListener("pointerleave", hideTip);
   $("plot").addEventListener("pointerover", function (e) {
@@ -571,7 +603,8 @@ a { color: inherit; }
     var b = plot._bars.find(function (x) { return x.date === col.dataset.date; });
     if (!b) return;
     var lines = b.parts.map(function (p) {
-      return '<div class="row"><span>' + esc(p[0] === OTHER ? "Other" : p[0]) + "</span><span>" + fmtTokens(p[1]) + "</span></div>";
+      return '<div class="row"><span>' + esc(p[0] === OTHER ? "Other" : p[0]) + "</span><span>" + fmtTokens(p[1]) +
+        (plot._priced && p[2] ? ' <span class="cost">' + fmtCost(p[2]) + "</span>" : "") + "</span></div>";
     });
     showTip("<b>" + esc(dayFmt.format(parseYmd(b.date))) + "</b>" + lines.join(""), col.querySelector(".stack") || col);
   });
@@ -706,14 +739,13 @@ a { color: inherit; }
       tokens[models[0]] = Math.round(msgs * (60000 + rnd() * 90000));
       if (rnd() < 0.6) tokens[models[1]] = Math.round(msgs * rnd() * 40000);
       if (rnd() < 0.3) tokens[models[2]] = Math.round(msgs * rnd() * 9000);
-      var io = {}, usage = {};
+      var usage = {};
       Object.keys(tokens).forEach(function (m) {
         var t = tokens[m] * 0.45; // each response once
-        io[m] = [Math.round(tokens[m] * 0.0004), Math.round(tokens[m] * 0.002)];
         usage[m] = [Math.round(t * 0.0002), Math.round(t * 0.002), Math.round(t * 0.95), Math.round(t * 0.03), Math.round(t * 0.0178)];
       });
       days.push({ date: ymd(d), messages: msgs, sessions: n, activeSessions: n, toolCalls: Math.round(msgs * 0.4),
-                  tokens: tokens, io: io, usage: usage });
+                  tokens: tokens, usage: usage });
     }
     return { version: 1, generatedAt: null, days: days, sessions: sessions };
   }
