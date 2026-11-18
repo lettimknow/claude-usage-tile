@@ -14,9 +14,8 @@
   --tile: rgb(var(--layer) / 0.1);
   --tab-on: rgb(var(--layer) / 0.05);
   --chip-on: rgb(var(--layer) / 0.035);
+  /* the grid's lightest and darkest shades, the days in between are mixed */
   --heat-1: #7badef;
-  --heat-2: #5396ea;
-  --heat-3: #247ee5;
   --heat-4: #0068d7;
   --m1: #3e70d8; --m2: #6b97e6; --m3: #8fb0ec; --m4: #adc5f1; --m5: #c9d8f5; --m6: #dce6f9;
   --tip-bg: #0b0b0b;
@@ -34,15 +33,13 @@
 @supports (color: color(display-p3 0 0 0)) {
   :root {
     --heat-1: color(display-p3 0.5255 0.6745 0.9176);
-    --heat-2: color(display-p3 0.3882 0.5804 0.8941);
-    --heat-3: color(display-p3 0.2510 0.4863 0.8706);
     --heat-4: color(display-p3 0.1490 0.4000 0.8157);
   }
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --page: #151515; --ink: #f0efec; --muted: #898781; --layer: 252 252 251;
-    --heat-1: #92a8e6; --heat-2: #7490df; --heat-3: #5877d8; --heat-4: #4160cb;
+    --heat-1: #92a8e6; --heat-4: #4160cb;
     --m1: #5a84dc; --m2: #6f93e2; --m3: #8ba7ea; --m4: #a9bdf0; --m5: #c9d5f5; --m6: #dde5f9;
     --tip-bg: #f0efec; --tip-fg: #151515; --note-bg: #1d2a3d; --note-ink: #9ec5f4; --focus: #86b6ef;
     color-scheme: dark;
@@ -50,7 +47,7 @@
 }
 :root[data-theme="dark"] {
   --page: #151515; --ink: #f0efec; --muted: #898781; --layer: 252 252 251;
-  --heat-1: #92a8e6; --heat-2: #7490df; --heat-3: #5877d8; --heat-4: #4160cb;
+  --heat-1: #92a8e6; --heat-4: #4160cb;
   --m1: #5a84dc; --m2: #6f93e2; --m3: #8ba7ea; --m4: #a9bdf0; --m5: #c9d5f5; --m6: #dde5f9;
   --tip-bg: #f0efec; --tip-fg: #151515; --note-bg: #1d2a3d; --note-ink: #9ec5f4; --focus: #86b6ef;
   color-scheme: dark;
@@ -126,10 +123,7 @@ a { color: inherit; }
   gap: 3px; touch-action: manipulation;
 }
 .cell { aspect-ratio: 1; border-radius: 3px; background: var(--tile); min-width: 0; }
-.cell[data-l="1"] { background: var(--heat-1); }
-.cell[data-l="2"] { background: var(--heat-2); }
-.cell[data-l="3"] { background: var(--heat-3); }
-.cell[data-l="4"] { background: var(--heat-4); }
+.cell.on { background: color-mix(in oklab, var(--heat-4) var(--p), var(--heat-1)); }
 .cell.future { visibility: hidden; }
 .cell.out { opacity: 0.3; }
 
@@ -403,7 +397,7 @@ a { color: inherit; }
     if (state.factPick[state.range] === undefined) state.factPick[state.range] = Math.random();
     var book = books[Math.floor(state.factPick[state.range] * books.length)];
     var times = Math.floor(sum.total / book[1]);
-    return times >= 2 ? "You’ve used ~" + times + "× more tokens than " + book[0] + "."
+    return times >= 2 ? "You’ve used ~" + fmtInt(times) + "× more tokens than " + book[0] + "."
                       : "You’ve used about as many tokens as " + book[0] + ".";
   }
 
@@ -425,10 +419,10 @@ a { color: inherit; }
     renderModels(data, sum);
   }
 
-  // Shade = share of the busiest day's tokens in the grid: up to 25%, 50%, 75%, then above.
-  function level(n, max) {
-    if (!n || !max) return 0;
-    return Math.min(4, Math.ceil((4 * n) / max));
+  // Shade runs smoothly from the lightest blue to the darkest by the square root of the day's share
+  // of the busiest day's tokens: most days are far below the busiest, the root spreads them over the scale.
+  function shade(n, max) {
+    return n && max ? Math.min(1, Math.sqrt(n / max)) : 0;
   }
 
   // Days before the selected period fade out; the shade itself stays set by the whole grid.
@@ -455,8 +449,11 @@ a { color: inherit; }
       cell.dataset.date = key;
       if (key > todayKey) cell.classList.add("future");
       else if (start && key < start) cell.classList.add("out");
-      var l = row ? level(tokens[key], max) || (row.messages > 0 ? 1 : 0) : 0;
-      if (l) { cell.dataset.l = String(l); activeDays++; }
+      if (row && (tokens[key] > 0 || row.messages > 0)) {
+        cell.classList.add("on");
+        cell.style.setProperty("--p", (100 * shade(tokens[key], max)).toFixed(1) + "%");
+        activeDays++;
+      }
       frag.appendChild(cell);
     }
     el.replaceChildren(frag);
