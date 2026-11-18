@@ -57,14 +57,18 @@
 }
 
 /* The start screen kept a chat box under the card; without it, the block sits a little above
-   the middle (the extra bottom padding). The card keeps its 526.5px width via the side padding. */
+   the middle. Its top stays where the Overview is centred, so switching tabs or periods only
+   grows or shrinks the card downward. --block is the Overview's height: heading, gap and card,
+   the grid's seven rows of squares following the card width. The card keeps its 526.5px width
+   via the side padding. */
 html { height: 100%; }
+:root { --block: calc(302px + (min(526.5px, 100vw - 32px) - 102px) * 7 / 26); }
 body {
   background: var(--page); color: var(--ink); font-family: var(--font); font-weight: var(--w-text);
-  min-height: 100%; display: grid; grid-template-columns: minmax(0, 1fr); align-content: center;
+  min-height: 100%; display: grid; grid-template-columns: minmax(0, 1fr); align-content: start;
 }
 .wrap {
-  margin: 0; box-sizing: border-box; padding-block: 24px calc(24px + 15vh);
+  margin: 0; box-sizing: border-box; padding-block: max(24px, (85vh - var(--block)) / 2) 24px;
   padding-left: max(16px, env(safe-area-inset-left, 0px), calc((100% - 526.5px) / 2));
   padding-right: max(16px, env(safe-area-inset-right, 0px), calc((100% - 526.5px) / 2));
   display: grid; gap: 53px;
@@ -149,6 +153,8 @@ a { color: inherit; }
 .col:hover .stack { filter: brightness(1.08); }
 .xaxis { grid-column: 2; position: relative; height: 16px; margin-top: 11px; }
 .xaxis span { position: absolute; width: 3.6em; margin-left: -1.8em; text-align: center; white-space: nowrap; }
+.xaxis span.start { left: 0; width: auto; margin-left: 0; }
+.xaxis span.end { right: 0; width: auto; margin-left: 0; }
 .legend { list-style: none; margin: 16px 0 0; padding: 0; display: grid; gap: 4px; font-size: 14px; line-height: 17.5px; }
 .legend li { display: grid; grid-template-columns: minmax(0, 1fr) auto 3.6em; column-gap: 12px; align-items: center; }
 .legend .name { display: flex; align-items: center; gap: 6px; min-width: 0; }
@@ -166,10 +172,12 @@ a { color: inherit; }
 .tip .cost, .stat .cost { font-weight: var(--w-text); }
 .tip .muted { opacity: 0.65; }
 .tip .row { display: flex; gap: 8px; justify-content: space-between; }
+.tip .total { margin-top: 4px; padding-top: 4px; border-top: 1px solid color-mix(in srgb, var(--tip-fg) 22%, transparent); }
 
 /* Two columns once a third of the card can't hold a six-figure "14.6B ≈ $345,020". */
 @media (max-width: 480px) {
   .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  :root { --block: calc(366px + (min(526.5px, 100vw - 32px) - 102px) * 7 / 26); } /* a third row of tiles, a wrapped fact */
 }
 @media (max-width: 360px) {
   .heat { gap: 2px; }
@@ -526,7 +534,7 @@ a { color: inherit; }
       // parts: [series, tokens, dollars]
       var parts = models.map(function (m) { return [m].concat(seriesOn(ms, members[m])); })
         .filter(function (p) { return p[1] > 0; });
-      return { date: d.date, parts: parts, total: parts.reduce(function (a, p) { return a + p[1]; }, 0) };
+      return { date: d.date, parts: parts, total: parts.reduce(function (a, p) { return a + p[1]; }, 0), cost: costOf(d) };
     }).filter(function (b) { return b.total > 0; });
     plot._bars = bars;
     plot._priced = priced;
@@ -546,16 +554,10 @@ a { color: inherit; }
     sizer.className = "sizer";
     sizer.textContent = longest;
     yaxis.appendChild(sizer);
-    // Up to eight dates, fewer when the card is narrow: about 52px per label ("Aug 18").
-    var room = Math.max(2, Math.min(8, Math.floor((document.querySelector(".card").clientWidth - 80) / 52)));
-    var every = Math.max(1, Math.ceil(bars.length / room));
     // Gaps are 0.3 of a bar. Seven bars or more fill the plot edge to edge (in % of its width:
     // n bars and n - 1 gaps); fewer keep the width of seven, each in the middle of its day.
     var n = bars.length, gap = 0.3, fill = n >= 7;
     var span = n + (n - 1) * gap, half = (50 * gap) / span + "%", narrow = (100 * n) / (7 + 6 * gap) + "%";
-    // A date may reach left under the scale; at the right edge it shifts in, or drops out when that
-    // would crowd the one before. Plot width in px, estimated: the card's content less the scale.
-    var plotPx = document.querySelector(".card").clientWidth - 27 - Math.max(22, 7 * longest.length) - 8, lastAt = -1e9;
     bars.forEach(function (b, i) {
       var col = document.createElement("div");
       col.className = "col";
@@ -573,15 +575,27 @@ a { color: inherit; }
       });
       col.appendChild(bar);
       plot.appendChild(col);
-      var mid = fill ? (i * (1 + gap) + 0.5) / span : (i + 0.5) / n; // the bar's middle
-      var at = Math.min(mid * plotPx, plotPx - 22);
-      if (i % every === 0 && at - lastAt >= 44) {
-        lastAt = at;
-        var label = document.createElement("span");
-        label.style.left = "min(" + mid * 100 + "%, calc(100% - 1.8em))";
-        label.textContent = shortFmt.format(parseYmd(b.date));
-        xaxis.appendChild(label);
-      }
+    });
+
+    // Dates: the first and the last bar always, the rest spread evenly by bar between them, each
+    // under its bar; one near an edge sits flush with it. As many as stay 50px apart, up to eight.
+    // Widths in px are estimates: the plot is the card's content less the scale, a date ~40px wide.
+    var W = document.querySelector(".card").clientWidth - 27 - Math.max(22, 7 * longest.length) - 8, HALF = 22;
+    var mid = function (i) { return (fill ? (i * (1 + gap) + 0.5) / span : (i + 0.5) / n) * W; };
+    var at = function (i) { return Math.min(Math.max(mid(i), HALF), W - HALF); }; // where the date's middle lands
+    var picks = [n - 1];
+    for (var count = Math.min(8, n); count > 1; count--) {
+      var p = [];
+      for (var k = 0; k < count; k++) p.push(Math.round((k * (n - 1)) / (count - 1)));
+      if (p.every(function (i, k) { return !k || at(i) - at(p[k - 1]) >= 50; })) { picks = p; break; }
+    }
+    picks.forEach(function (i) {
+      var label = document.createElement("span");
+      label.textContent = shortFmt.format(parseYmd(bars[i].date));
+      if (mid(i) < HALF) label.className = "start";
+      else if (mid(i) > W - HALF) label.className = "end";
+      else label.style.left = (mid(i) / W) * 100 + "%";
+      xaxis.appendChild(label);
     });
   }
 
@@ -631,7 +645,12 @@ a { color: inherit; }
       return '<div class="row"><span>' + esc(p[0] === OTHER ? "Other" : p[0]) + "</span><span>" + fmtTokens(p[1]) +
         (plot._priced && p[2] ? ' <span class="cost">' + fmtCost(p[2]) + "</span>" : "") + "</span></div>";
     });
-    // The date dimmed, as in the grid's tooltip.
+    // The date dimmed, as in the grid's tooltip; with two models or more, the day's total under a
+    // thin line, the same tokens and cost as the grid shows for that day (web searches included).
+    if (b.parts.length > 1) {
+      lines.push('<div class="row total"><span>Total</span><span>' + fmtTokens(b.total) +
+        (plot._priced && b.cost ? ' <span class="cost">' + fmtCost(b.cost.dollars) + "</span>" : "") + "</span></div>");
+    }
     showTip('<div class="muted">' + esc(dayFmt.format(parseYmd(b.date))) + "</div>" + lines.join(""), col.querySelector(".stack") || col);
   });
   $("plot").addEventListener("pointerleave", hideTip);
