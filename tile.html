@@ -96,6 +96,7 @@ a { color: inherit; }
   margin-top: 12px; background: var(--note-bg); color: var(--note-ink); border-radius: 6px; padding: 8px 10px;
   font-size: 13px; line-height: 18px; display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
 }
+.note[hidden] { display: none; }
 .note p { margin: 0; flex: 1 1 260px; min-width: 0; }
 .note button {
   border: 0; border-radius: 4px; padding: 4px 10px; background: var(--note-ink); color: var(--page);
@@ -159,7 +160,6 @@ a { color: inherit; }
   font-family: var(--font);
 }
 .tip b { display: block; font-weight: var(--w-value); font-size: 13px; }
-.tip .cost { font-weight: var(--w-text); }
 .tip .muted { opacity: 0.65; }
 .tip .row { display: flex; gap: 8px; justify-content: space-between; }
 
@@ -533,6 +533,7 @@ a { color: inherit; }
   function showTip(html, target) {
     tip.innerHTML = html;
     tip.hidden = false;
+    tip.style.left = "0px"; tip.style.top = "0px"; // measure at full width, not squeezed at the last spot
     var r = target.getBoundingClientRect();
     var t = tip.getBoundingClientRect();
     var x = Math.min(window.innerWidth - t.width - 8, Math.max(8, r.left + r.width / 2 - t.width / 2));
@@ -547,21 +548,20 @@ a { color: inherit; }
     var cell = e.target.closest(".cell");
     if (!cell || cell.classList.contains("future") || !state.data) return;
     var row = state.data.days.find(function (d) { return d.date === cell.dataset.date; });
-    // Input + output tokens lead, the measure of the Models tab, with their cost at API prices;
-    // messages and sessions that ran that day follow (older servers send only the sessions
-    // started that day).
+    // Messages lead: the grid is shaded by them, as the original card was. Input + output
+    // tokens with their cost at API prices and the sessions that ran that day follow (older
+    // servers send only the sessions started that day).
     var msgs = row ? row.messages : 0;
     var sess = row ? (typeof row.activeSessions === "number" ? row.activeSessions : row.sessions) : 0;
     var io = row ? Object.keys(row.io || row.tokens).reduce(function (a, m) { var p = ioOf(row, m); return a + p[0] + p[1]; }, 0) : 0;
     var cost = row ? costOf(row) : null;
     var msgText = fmtInt(msgs) + (msgs === 1 ? " message" : " messages");
     var sessText = fmtInt(sess) + (sess === 1 ? " session" : " sessions");
+    var tokText = io ? fmtTokens(io) + " tokens" + (cost ? " " + fmtCost(cost.dollars) : "") + " · " : "";
     showTip('<div class="muted">' + esc(dayFmt.format(parseYmd(cell.dataset.date))) + "</div>" +
       (!msgs ? "<b>No activity</b>"
-        : io ? "<b>" + fmtTokens(io) + " tokens" + (cost ? ' <span class="cost">' + fmtCost(cost.dollars) + "</span>" : "") + "</b>" +
-               '<div class="muted">' + msgText + " · " + sessText + "</div>" +
-               (cost && cost.unpriced ? '<div class="muted">+ unpriced models</div>' : "")
-        : "<b>" + msgText + "</b>" + '<div class="muted">' + sessText + "</div>"), cell);
+        : "<b>" + msgText + "</b>" + '<div class="muted">' + tokText + sessText + "</div>" +
+          (io && cost && cost.unpriced ? '<div class="muted">+ unpriced models</div>' : "")), cell);
   });
   $("heat").addEventListener("pointerleave", hideTip);
   $("plot").addEventListener("pointerover", function (e) {
