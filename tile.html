@@ -159,6 +159,7 @@ a { color: inherit; }
   font-family: var(--font);
 }
 .tip b { display: block; font-weight: var(--w-value); font-size: 13px; }
+.tip .cost { font-weight: var(--w-text); }
 .tip .muted { opacity: 0.65; }
 .tip .row { display: flex; gap: 8px; justify-content: space-between; }
 
@@ -267,7 +268,12 @@ a { color: inherit; }
   function fmtTick(n) { return n ? fmtTokens(n).replace(/\.0(?=[kMB]$)/, "") : "0"; }
   var usdWhole = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
   var usdCents = new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  function fmtCost(n) { return "≈ $" + (n >= 10 ? usdWhole.format(n) : usdCents.format(n)); }
+  // Whole dollars from $10, cents below; a day that rounds to zero cents still says it cost something.
+  function fmtCost(n) {
+    if (n >= 9.995) return "≈ $" + usdWhole.format(n);
+    if (n >= 0.005) return "≈ $" + usdCents.format(n);
+    return n > 0 ? "< $0.01" : "$0";
+  }
   function fmtHour(h) {
     if (h === 0) return "12 AM";
     if (h < 12) return h + " AM";
@@ -541,7 +547,7 @@ a { color: inherit; }
     var sessText = fmtInt(sess) + (sess === 1 ? " session" : " sessions");
     showTip('<div class="muted">' + esc(dayFmt.format(parseYmd(cell.dataset.date))) + "</div>" +
       (!msgs ? "<b>No activity</b>"
-        : io ? "<b>" + fmtTokens(io) + " tokens" + (cost ? " · " + fmtCost(cost.dollars) : "") + "</b>" +
+        : io ? "<b>" + fmtTokens(io) + " tokens" + (cost ? ' <span class="cost">' + fmtCost(cost.dollars) + "</span>" : "") + "</b>" +
                '<div class="muted">' + msgText + " · " + sessText + "</div>" +
                (cost && cost.unpriced ? '<div class="muted">+ unpriced models</div>' : "")
         : "<b>" + msgText + "</b>" + '<div class="muted">' + sessText + "</div>"), cell);
