@@ -236,6 +236,22 @@ a { color: inherit; }
   var RAMP = 6; // shades of one blue, darkest for the biggest model; past five, the rest fold into Other
   var OTHER = "\u0000other";
 
+  // Claude API prices in $ per million tokens: input, output, cache read, cache write 5m and 1h
+  // (platform.claude.com/docs/en/about-claude/pricing, November 2026).
+  var PRICES = {
+    "fable-5-2": [8, 40, 0.2, 10, 16], "mythos-5-2": [8, 40, 0.2, 10, 16],
+    "fable-5-1": [10, 50, 0.25, 12.5, 20], "mythos-5-1": [10, 50, 0.25, 12.5, 20],
+    "fable-5": [10, 50, 1, 12.5, 20], "mythos-5": [10, 50, 1, 12.5, 20],
+    "opus-5-5": [4, 20, 0.2, 5, 8],
+    "opus-5": [5, 25, 0.5, 6.25, 10], "opus-4-8": [5, 25, 0.5, 6.25, 10], "opus-4-7": [5, 25, 0.5, 6.25, 10],
+    "opus-4-6": [5, 25, 0.5, 6.25, 10], "opus-4-5": [5, 25, 0.5, 6.25, 10],
+    "opus-4-1": [15, 75, 1.5, 18.75, 30], "opus-4": [15, 75, 1.5, 18.75, 30],
+    "sonnet-5-5": [2, 10, 0.1, 2.5, 4], "sonnet-5": [2, 10, 0.2, 2.5, 4],
+    "sonnet-4-6": [3, 15, 0.3, 3.75, 6], "sonnet-4-5": [3, 15, 0.3, 3.75, 6], "sonnet-4": [3, 15, 0.3, 3.75, 6],
+    "haiku-5-5": [0.1, 0.5, 0.01, 0.125, 0.2], // prompts up to 100K tokens; longer ones cost 5x
+    "haiku-4-5": [1, 5, 0.1, 1.25, 2]
+  };
+
   var state = { data: null, example: false, range: "all", view: "overview", factPick: {}, mcp: null };
   var $ = function (id) { return document.getElementById(id); };
 
@@ -249,6 +265,9 @@ a { color: inherit; }
     return String(Math.round(n));
   }
   function fmtTick(n) { return n ? fmtTokens(n).replace(/\.0(?=[kMB]$)/, "") : "0"; }
+  var usdWhole = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
+  var usdCents = new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  function fmtCost(n) { return "≈ $" + (n >= 10 ? usdWhole.format(n) : usdCents.format(n)); }
   function fmtHour(h) {
     if (h === 0) return "12 AM";
     if (h < 12) return h + " AM";
@@ -285,6 +304,22 @@ a { color: inherit; }
   function ioOf(day, model) {
     if (day.io) return day.io[model] || [0, 0];
     return [0, day.tokens[model] || 0];
+  }
+
+  function priceOf(id) {
+    return PRICES[String(id).replace(/^claude-/, "").replace(/\[.*\]$/, "").replace(/-\d{8}$/, "")] || null;
+  }
+  // One day at API prices (servers before 0.6.0 send no usage: null). A model missing
+  // from the price table counts as $0 and flags the day.
+  function costOf(day) {
+    if (!day.usage) return null;
+    var dollars = 0, unpriced = false;
+    Object.keys(day.usage).forEach(function (id) {
+      var u = day.usage[id], p = priceOf(id);
+      if (!p) { unpriced = unpriced || u.some(Boolean); return; }
+      for (var i = 0; i < 5; i++) dollars += (u[i] || 0) * p[i] / 1e6;
+    });
+    return { dollars: dollars, unpriced: unpriced };
   }
 
   function summarize(data) {
@@ -495,16 +530,20 @@ a { color: inherit; }
     var cell = e.target.closest(".cell");
     if (!cell || cell.classList.contains("future") || !state.data) return;
     var row = state.data.days.find(function (d) { return d.date === cell.dataset.date; });
-    // Input + output tokens lead, the measure of the Models tab; messages and sessions that
-    // ran that day follow (older servers send only the sessions started that day).
+    // Input + output tokens lead, the measure of the Models tab, with their cost at API prices;
+    // messages and sessions that ran that day follow (older servers send only the sessions
+    // started that day).
     var msgs = row ? row.messages : 0;
     var sess = row ? (typeof row.activeSessions === "number" ? row.activeSessions : row.sessions) : 0;
     var io = row ? Object.keys(row.io || row.tokens).reduce(function (a, m) { var p = ioOf(row, m); return a + p[0] + p[1]; }, 0) : 0;
+    var cost = row ? costOf(row) : null;
     var msgText = fmtInt(msgs) + (msgs === 1 ? " message" : " messages");
     var sessText = fmtInt(sess) + (sess === 1 ? " session" : " sessions");
     showTip('<div class="muted">' + esc(dayFmt.format(parseYmd(cell.dataset.date))) + "</div>" +
       (!msgs ? "<b>No activity</b>"
-        : io ? "<b>" + fmtTokens(io) + " tokens</b>" + '<div class="muted">' + msgText + " · " + sessText + "</div>"
+        : io ? "<b>" + fmtTokens(io) + " tokens" + (cost ? " · " + fmtCost(cost.dollars) : "") + "</b>" +
+               '<div class="muted">' + msgText + " · " + sessText + "</div>" +
+               (cost && cost.unpriced ? '<div class="muted">+ unpriced models</div>' : "")
         : "<b>" + msgText + "</b>" + '<div class="muted">' + sessText + "</div>"), cell);
   });
   $("heat").addEventListener("pointerleave", hideTip);
@@ -650,10 +689,14 @@ a { color: inherit; }
       tokens[models[0]] = Math.round(msgs * (60000 + rnd() * 90000));
       if (rnd() < 0.6) tokens[models[1]] = Math.round(msgs * rnd() * 40000);
       if (rnd() < 0.3) tokens[models[2]] = Math.round(msgs * rnd() * 9000);
-      var io = {};
-      Object.keys(tokens).forEach(function (m) { io[m] = [Math.round(tokens[m] * 0.0004), Math.round(tokens[m] * 0.002)]; });
+      var io = {}, usage = {};
+      Object.keys(tokens).forEach(function (m) {
+        var t = tokens[m] * 0.45; // each response once
+        io[m] = [Math.round(tokens[m] * 0.0004), Math.round(tokens[m] * 0.002)];
+        usage[m] = [Math.round(t * 0.0002), Math.round(t * 0.002), Math.round(t * 0.95), Math.round(t * 0.03), Math.round(t * 0.0178)];
+      });
       days.push({ date: ymd(d), messages: msgs, sessions: n, activeSessions: n, toolCalls: Math.round(msgs * 0.4),
-                  tokens: tokens, io: io });
+                  tokens: tokens, io: io, usage: usage });
     }
     return { version: 1, generatedAt: null, days: days, sessions: sessions };
   }
