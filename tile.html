@@ -655,13 +655,14 @@ a { color: inherit; }
   });
   $("plot").addEventListener("pointerleave", hideTip);
   window.addEventListener("scroll", hideTip, { passive: true });
-  var resizing = 0, lastWidth = window.innerWidth;
-  window.addEventListener("resize", function () {
-    if (window.innerWidth === lastWidth) return;
-    lastWidth = window.innerWidth;
+  // Date labels follow the card's width, whatever changes it.
+  var resizing = 0, card = document.querySelector(".card"), lastWidth = card.clientWidth;
+  new ResizeObserver(function () {
+    if (card.clientWidth === lastWidth) return;
+    lastWidth = card.clientWidth;
     cancelAnimationFrame(resizing);
-    resizing = requestAnimationFrame(function () { hideTip(); render(); }); // date labels follow the card width
-  });
+    resizing = requestAnimationFrame(function () { hideTip(); render(); });
+  }).observe(card);
 
   // ------------------------------------------------------------ controls
   function setView(view) {
