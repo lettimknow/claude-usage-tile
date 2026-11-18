@@ -624,7 +624,8 @@ a { color: inherit; }
       return '<div class="row"><span>' + esc(p[0] === OTHER ? "Other" : p[0]) + "</span><span>" + fmtTokens(p[1]) +
         (plot._priced && p[2] ? ' <span class="cost">' + fmtCost(p[2]) + "</span>" : "") + "</span></div>";
     });
-    showTip("<b>" + esc(dayFmt.format(parseYmd(b.date))) + "</b>" + lines.join(""), col.querySelector(".stack") || col);
+    // The date dimmed, as in the grid's tooltip.
+    showTip('<div class="muted">' + esc(dayFmt.format(parseYmd(b.date))) + "</div>" + lines.join(""), col.querySelector(".stack") || col);
   });
   $("plot").addEventListener("pointerleave", hideTip);
   window.addEventListener("scroll", hideTip, { passive: true });
