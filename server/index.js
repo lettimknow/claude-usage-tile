@@ -16,9 +16,9 @@ const os = require("os");
 const path = require("path");
 
 const SERVER_NAME = "claude-usage-tile";
-const SERVER_VERSION = "0.6.0";
+const SERVER_VERSION = "0.6.1";
 const TOOL_NAME = "get_usage_stats";
-const CACHE_VERSION = 6;
+const CACHE_VERSION = 7;
 
 function configDir() {
   return process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), ".claude");
@@ -64,6 +64,23 @@ function usageVector(usage) {
     tokenCount(usage.cache_read_input_tokens), write5m, write1h];
 }
 
+// Models whose price depends on the prompt: a prompt over this many tokens costs more.
+const PROMPT_TIERS = { "claude-haiku-5-5": 100000 };
+
+/*
+ * The model id plus what changes its price: "|fast" for fast mode, "|us" for US-only
+ * inference, "|long" for a prompt over the model's tier. The prompt is everything sent:
+ * input, cache reads and cache writes.
+ */
+function priceKey(model, speed, geo, vector) {
+  let key = model;
+  if (speed === "fast") key += "|fast";
+  if (geo === "us") key += "|us";
+  const tier = PROMPT_TIERS[model.replace(/-\d{8}$/, "")];
+  if (tier && vector[0] + vector[2] + vector[3] + vector[4] > tier) key += "|long";
+  return key;
+}
+
 /*
  * One API response shows up on several assistant lines, one per content block;
  * streaming can leave a smaller output count on the early ones, so each part
@@ -79,8 +96,8 @@ function addResponse(responses, key, date, model, vector) {
 }
 
 /*
- * Per-response usage for the cache, grouped by day and model:
- * {date: {model: ["key key ...", five numbers per key]}}. A key is the tail of the
+ * Per-response usage for the cache, grouped by day and price key:
+ * {date: {priceKey: ["key key ...", five numbers per key]}}. A key is the tail of the
  * message id: random enough to tell responses apart, short enough for the cache.
  */
 function packResponses(responses) {
@@ -102,8 +119,9 @@ function packResponses(responses) {
  * repeating the message's usage, and the card counted each of them).
  *
  * Cost needs each API response once, so the record also keeps per-response
- * usage keyed by message id. An advisor call inside a response is billed at the
- * advisor's model and is not part of the response's own usage: it gets a key of its own.
+ * usage keyed by message id, and the web searches of the responses that ran any.
+ * An advisor call inside a response is billed at the advisor's model and is not
+ * part of the response's own usage: it gets a key of its own.
  */
 function parseTranscript(file, isSubagent) {
   const text = fs.readFileSync(file, "utf8");
@@ -131,7 +149,8 @@ function parseTranscript(file, isSubagent) {
 
   const days = {}; // date -> [messages, toolCalls, {model: tokens}, {model: [input, output]}]
   const day = (date) => (days[date] ||= [0, 0, {}, {}]);
-  const responses = new Map(); // key -> [date, model, usage vector]
+  const responses = new Map(); // key -> [date, price key, usage vector]
+  const searches = {}; // key -> [date, web searches]
 
   for (const [when, entry] of entries) {
     const date = localDate(when);
@@ -169,15 +188,21 @@ function parseTranscript(file, isSubagent) {
         if (step && step.type === "message") usageVector(step).forEach((n, i) => { vector[i] += n; });
       }
     }
-    addResponse(responses, key, date, model, vector);
+    addResponse(responses, key, date, priceKey(model, usage.speed, usage.inference_geo, vector), vector);
     steps.forEach((step, i) => {
       if (step && typeof step === "object" && step.type !== "message" && typeof step.model === "string") {
-        addResponse(responses, `${key}~${i}`, date, step.model, usageVector(step));
+        const stepVector = usageVector(step);
+        const stepKey = priceKey(step.model, step.speed, step.inference_geo || usage.inference_geo, stepVector);
+        addResponse(responses, `${key}~${i}`, date, stepKey, stepVector);
       }
     });
+    const tools = usage.server_tool_use;
+    const webSearches = tokenCount(tools && typeof tools === "object" ? tools.web_search_requests : 0);
+    if (webSearches > (searches[key] ? searches[key][1] : 0)) searches[key] = [date, webSearches];
   }
 
   const record = { days, resp: packResponses(responses) };
+  if (Object.keys(searches).length) record.search = searches;
   if (!isSubagent) {
     const first = entries[0][0];
     const last = entries[entries.length - 1][0];
@@ -281,7 +306,8 @@ function collect() {
 
   const days = {};
   // sessions: started that day; activeSessions: had messages that day;
-  // usage: per model, [input, output, cache read, cache write 5m, cache write 1h], each API response once
+  // usage: per price key (see priceKey), [input, output, cache read, cache write 5m, cache write 1h],
+  // each API response once; webSearches: server-side web searches, present when there were any
   const row = (date) => (days[date] ||= {
     date, messages: 0, sessions: 0, activeSessions: 0, toolCalls: 0, tokens: {}, io: {}, usage: {},
   });
@@ -292,6 +318,7 @@ function collect() {
   const sessions = [];
   // A forked session copies the history into a new transcript: one response, one count.
   const responses = new Map();
+  const searches = new Map();
   for (const item of Object.values(known)) {
     const record = item && item.rec;
     if (!record) continue;
@@ -319,12 +346,14 @@ function collect() {
         keys.split(" ").forEach((key, i) => addResponse(responses, key, date, model, numbers.slice(i * 5, i * 5 + 5)));
       }
     }
+    for (const [key, [date, count]] of Object.entries(record.search || {})) addResponse(searches, key, date, "", [count]);
     if (record.session) {
       sessions.push(record.session);
       row(record.session[0]).sessions += 1;
     }
   }
   for (const [date, model, vector] of responses.values()) addUsage(date, model, vector);
+  for (const [date, , [count]] of searches.values()) row(date).webSearches = (row(date).webSearches || 0) + count;
   sessions.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : a[1] - b[1]));
   const seconds = (Date.now() - started) / 1000;
   log(`collected: ${Object.keys(known).length} files, ${parsed} parsed, ${seconds.toFixed(1)}s`);
@@ -344,8 +373,9 @@ const TOOL = {
   title: "Claude Code usage stats",
   description:
     "Daily Claude Code usage from local session transcripts: messages, sessions started and " +
-    "active, tool calls and tokens per model, billed usage per model (input, output, cache " +
-    "read, cache write 5m and 1h, each API response once), plus one row per session (start " +
+    "active, tool calls and tokens per model, billed usage per model and price variant (input, " +
+    "output, cache read, cache write 5m and 1h, each API response once; fast mode, US-only " +
+    "inference and long prompts apart) and web searches, plus one row per session (start " +
     "date, start hour, duration in ms, messages). Read-only.",
   inputSchema: { type: "object", properties: {}, additionalProperties: false },
   annotations: { readOnlyHint: true, openWorldHint: false },

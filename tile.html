@@ -249,9 +249,13 @@ a { color: inherit; }
     "opus-4-1": [15, 75, 1.5, 18.75, 30], "opus-4": [15, 75, 1.5, 18.75, 30],
     "sonnet-5-5": [2, 10, 0.1, 2.5, 4], "sonnet-5": [2, 10, 0.2, 2.5, 4],
     "sonnet-4-6": [3, 15, 0.3, 3.75, 6], "sonnet-4-5": [3, 15, 0.3, 3.75, 6], "sonnet-4": [3, 15, 0.3, 3.75, 6],
-    "haiku-5-5": [0.1, 0.5, 0.01, 0.125, 0.2], // prompts up to 100K tokens; longer ones cost 5x
+    "haiku-5-5": [0.1, 0.5, 0.01, 0.125, 0.2], // prompts up to 100K tokens; longer ones: LONG
     "haiku-4-5": [1, 5, 0.1, 1.25, 2]
   };
+  var LONG = { "haiku-5-5": [0.5, 2.5, 0.05, 0.625, 1] }; // prompts over the model's tier ("|long")
+  var FAST = { "fable-5-2": 2, "mythos-5-2": 2, "opus-5-5": 2, "opus-5": 2, "opus-4-8": 2 }; // x the rates above
+  var US_ONLY = 1.1; // inference_geo "us", on every kind of token
+  var WEB_SEARCH = 0.01; // $ per search
 
   var state = { data: null, example: false, range: "all", view: "overview", factPick: {}, mcp: null };
   var $ = function (id) { return document.getElementById(id); };
@@ -312,16 +316,23 @@ a { color: inherit; }
     return [0, day.tokens[model] || 0];
   }
 
-  function priceOf(id) {
-    return PRICES[String(id).replace(/^claude-/, "").replace(/\[.*\]$/, "").replace(/-\d{8}$/, "")] || null;
+  // A usage key is a model id with what changes its price: "|fast", "|us", "|long".
+  function priceOf(key) {
+    var parts = String(key).split("|");
+    var id = parts[0].replace(/^claude-/, "").replace(/\[.*\]$/, "").replace(/-\d{8}$/, "");
+    var has = function (flag) { return parts.indexOf(flag, 1) > 0; };
+    var p = has("long") ? LONG[id] : PRICES[id];
+    if (!p || (has("fast") && !FAST[id])) return null;
+    var k = (has("fast") ? FAST[id] : 1) * (has("us") ? US_ONLY : 1);
+    return p.map(function (x) { return x * k; });
   }
-  // One day at API prices (servers before 0.6.0 send no usage: null). A model missing
-  // from the price table counts as $0 and flags the day.
+  // One day at API prices (servers before 0.6.0 send no usage: null). A model or variant
+  // missing from the price tables counts as $0 and flags the day.
   function costOf(day) {
     if (!day.usage) return null;
-    var dollars = 0, unpriced = false;
-    Object.keys(day.usage).forEach(function (id) {
-      var u = day.usage[id], p = priceOf(id);
+    var dollars = (day.webSearches || 0) * WEB_SEARCH, unpriced = false;
+    Object.keys(day.usage).forEach(function (key) {
+      var u = day.usage[key], p = priceOf(key);
       if (!p) { unpriced = unpriced || u.some(Boolean); return; }
       for (var i = 0; i < 5; i++) dollars += (u[i] || 0) * p[i] / 1e6;
     });

@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "claude-usage-tile",
   "display_name": "Claude Code Usage Tile",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "Feeds the Claude Code usage tile: sessions, messages, tokens per model and daily activity, read from your local Claude Code transcripts.",
   "long_description": "A tiny local server for the Claude Code Usage Tile artifact. It reads the session transcripts Claude Code keeps in ~/.claude/projects, adds them up per day and hands the totals to the tile when you open it in Claude Desktop. Nothing leaves your computer and no model is involved, so it costs no tokens. Totals are cached in ~/.cache/claude-usage-tile, so after the first scan an update takes a fraction of a second, and history stays even after Claude Code cleans up old transcripts.",
   "author": {
