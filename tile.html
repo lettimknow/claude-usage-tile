@@ -298,7 +298,7 @@ a { color: inherit; }
   function modelName(id) {
     if (!id || id === "unknown") return "Unknown";
     if (id.indexOf("claude-") !== 0) return id;
-    var parts = id.slice(7).replace(/-\d{8}$/, "").split("-");
+    var parts = id.slice(7).replace(/\[.*\]$/, "").replace(/-\d{8}$/, "").split("-");
     var family = parts.filter(function (p) { return /^[a-z]/i.test(p); })[0];
     var nums = parts.filter(function (p) { return /^\d+$/.test(p); });
     if (!family) return id;
@@ -549,17 +549,22 @@ a { color: inherit; }
     // Up to eight dates, fewer when the card is narrow: about 52px per label ("Aug 18").
     var room = Math.max(2, Math.min(8, Math.floor((document.querySelector(".card").clientWidth - 80) / 52)));
     var every = Math.max(1, Math.ceil(bars.length / room));
-    // Gaps are 0.3 of a bar; in % of the plot width: n bars and n - 1 gaps fill it.
-    var n = bars.length, gap = 0.3, span = n + (n - 1) * gap, half = (50 * gap) / span + "%";
+    // Gaps are 0.3 of a bar. Seven bars or more fill the plot edge to edge (in % of its width:
+    // n bars and n - 1 gaps); fewer keep the width of seven, each in the middle of its day.
+    var n = bars.length, gap = 0.3, fill = n >= 7;
+    var span = n + (n - 1) * gap, half = (50 * gap) / span + "%", narrow = (100 * n) / (7 + 6 * gap) + "%";
+    // A date may reach left under the scale; at the right edge it shifts in, or drops out when that
+    // would crowd the one before. Plot width in px, estimated: the card's content less the scale.
+    var plotPx = document.querySelector(".card").clientWidth - 27 - Math.max(22, 7 * longest.length) - 8, lastAt = -1e9;
     bars.forEach(function (b, i) {
       var col = document.createElement("div");
       col.className = "col";
       col.dataset.date = b.date;
-      col.style.paddingLeft = i ? half : "0";
-      col.style.paddingRight = i < n - 1 ? half : "0";
       var bar = document.createElement("div");
       bar.className = "stack";
       bar.style.height = (b.total / top) * 100 + "%";
+      if (fill) { col.style.paddingLeft = i ? half : "0"; col.style.paddingRight = i < n - 1 ? half : "0"; }
+      else { col.style.justifyContent = "center"; bar.style.width = narrow; }
       b.parts.forEach(function (p) {
         var seg = document.createElement("i");
         seg.style.flex = p[1] + " 1 0px";
@@ -568,10 +573,12 @@ a { color: inherit; }
       });
       col.appendChild(bar);
       plot.appendChild(col);
-      if (i % every === 0) {
+      var mid = fill ? (i * (1 + gap) + 0.5) / span : (i + 0.5) / n; // the bar's middle
+      var at = Math.min(mid * plotPx, plotPx - 22);
+      if (i % every === 0 && at - lastAt >= 44) {
+        lastAt = at;
         var label = document.createElement("span");
-        // Under the bar's middle, kept inside the plot at both ends.
-        label.style.left = "clamp(1.8em, " + ((i * (1 + gap) + 0.5) / span) * 100 + "%, calc(100% - 1.8em))";
+        label.style.left = "min(" + mid * 100 + "%, calc(100% - 1.8em))";
         label.textContent = shortFmt.format(parseYmd(b.date));
         xaxis.appendChild(label);
       }
