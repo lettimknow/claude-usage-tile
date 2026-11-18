@@ -1,6 +1,6 @@
 # Claude Code Usage Tile
 
-The Claude Code usage card that Claude Desktop removed in version 2.42304.0, back as an artifact pinned in your sidebar.
+The Claude Code usage card that Claude Desktop removed in version 2.42304.0, back as an artifact.
 
 <img src="docs/tile.png" alt="The tile in light and dark: Overview with six numbers and a 26-week activity grid, Models with tokens per day by model">
 
@@ -24,6 +24,6 @@ Set up https://github.com/lettimknow/claude-usage-tile for me
     "user": {"scopes": ["profile"]}}
    ```
 
-3. Pin the artifact to the user's sidebar and tell them to open it from there, not from a link in the chat: the sidebar opens it where it can reach the extension.
+3. Tell the user to open it from Artifacts in the sidebar, not from a link in the chat: the sidebar opens it where it can reach the extension.
 
 Not affiliated with Anthropic.
