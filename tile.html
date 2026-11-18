@@ -139,6 +139,7 @@ a { color: inherit; }
 }
 .yaxis { position: relative; min-width: 22px; }
 .yaxis span { position: absolute; right: 0; transform: translateY(-50%); white-space: nowrap; }
+.yaxis .sizer { display: block; height: 0; overflow: hidden; visibility: hidden; font-style: normal; white-space: nowrap; }
 .plot { position: relative; display: flex; align-items: flex-end; padding-right: 12px; }
 .col { flex: 1 1 0; min-width: 0; height: 100%; display: flex; justify-content: center; align-items: flex-end; }
 .stack { width: 77%; display: flex; flex-direction: column-reverse; gap: 1px; border-radius: 2px 2px 0 0; overflow: hidden; }
@@ -276,8 +277,11 @@ a { color: inherit; }
   function fmtTick(n) { return n ? fmtTokens(n).replace(/\.0(?=[kMB]$)/, "") : "0"; }
   var usdWhole = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
   var usdCents = new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  // Whole dollars from $10, cents below; a day that rounds to zero cents still says it cost something.
+  // Thousands and millions shortened like tokens ($10.6k), whole dollars from $10, cents below;
+  // a day that rounds to zero cents still says it cost something.
   function fmtCost(n) {
+    if (n >= 999950) return "≈ $" + (n / 1e6).toFixed(1) + "M";
+    if (n >= 999.5) return "≈ $" + (n / 1e3).toFixed(1) + "k";
     if (n >= 9.995) return "≈ $" + usdWhole.format(n);
     if (n >= 0.005) return "≈ $" + usdCents.format(n);
     return n > 0 ? "< $0.01" : "$0";
@@ -527,12 +531,19 @@ a { color: inherit; }
     if (!bars.length) return;
     var max = Math.max.apply(null, bars.map(function (b) { return b.total; }));
     var step = niceStep(max / 5), top = Math.ceil(max / step) * step;
+    var longest = "";
     for (var v = 0; v <= top + step / 2; v += step) {
       var t = document.createElement("span");
       t.style.top = (100 - (v / top) * 100) + "%";
       t.textContent = fmtTick(v);
+      if (t.textContent.length > longest.length) longest = t.textContent;
       yaxis.appendChild(t);
     }
+    // The ticks sit out of flow; an invisible copy of the longest one gives the axis its width.
+    var sizer = document.createElement("i");
+    sizer.className = "sizer";
+    sizer.textContent = longest;
+    yaxis.appendChild(sizer);
     // Up to eight dates, fewer when the card is narrow: about 52px per label ("Aug 18").
     var room = Math.max(2, Math.min(8, Math.floor((document.querySelector(".card").clientWidth - 80) / 52)));
     var every = Math.max(1, Math.ceil(bars.length / room));
