@@ -419,10 +419,9 @@ a { color: inherit; }
     renderModels(data, sum);
   }
 
-  // Shade runs smoothly from the lightest blue to the darkest by the square root of the day's share
-  // of the busiest day's tokens: most days are far below the busiest, the root spreads them over the scale.
+  // Shade runs smoothly from the lightest blue to the darkest by the day's share of the busiest day's tokens.
   function shade(n, max) {
-    return n && max ? Math.min(1, Math.sqrt(n / max)) : 0;
+    return n && max ? Math.min(1, n / max) : 0;
   }
 
   // Days before the selected period fade out; the shade itself stays set by the whole grid.
